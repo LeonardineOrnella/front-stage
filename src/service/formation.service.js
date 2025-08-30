@@ -24,20 +24,9 @@ export const formationService = {
   },
 
   // Créer une nouvelle formation
-  createFormation: async (formationData, files) => {
+  createFormation: async (formData) => {
     try {
-      const formData = new FormData();
-      
-      // Ajouter les fichiers
-      if (files && files.length > 0) {
-        files.forEach((file, index) => {
-          formData.append('files', file);
-        });
-      }
-      
-      // Ajouter les données de formation
-      formData.append('formation', JSON.stringify(formationData));
-      
+      // formData est déjà un FormData avec la bonne structure
       const response = await axios.post('/formations', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -51,20 +40,8 @@ export const formationService = {
   },
 
   // Mettre à jour une formation
-  updateFormation: async (id, formationData, files) => {
+  updateFormation: async (id, formData) => {
     try {
-      const formData = new FormData();
-      
-      // Ajouter les fichiers
-      if (files && files.length > 0) {
-        files.forEach((file, index) => {
-          formData.append('files', file);
-        });
-      }
-      
-      // Ajouter les données de formation
-      formData.append('formation', JSON.stringify(formationData));
-      
       const response = await axios.put(`/formations/${id}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',

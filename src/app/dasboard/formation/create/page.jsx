@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { formationService } from '../../../../service/formation.service';
-import { ArrowLeft, Plus, X, Upload, FileText, Video, File } from 'lucide-react';
+import { ArrowLeft, Plus, X, Upload, FileText, Video, File, Image, Trash2 } from 'lucide-react';
 
 export default function CreateFormationPage() {
   const router = useRouter();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState([]);
+  const [imageCouverture, setImageCouverture] = useState(null);
   const [formData, setFormData] = useState({
     titre_form: '',
     description: '',
@@ -47,6 +48,27 @@ export default function CreateFormationPage() {
   const handleFileChange = (e) => {
     const newFiles = Array.from(e.target.files);
     setFiles(prev => [...prev, ...newFiles]);
+  };
+
+  const handleImageCouvertureChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Vérifier le type de fichier
+      if (!file.type.startsWith('image/')) {
+        alert('Veuillez sélectionner une image valide (JPEG, PNG, GIF, WebP)');
+        return;
+      }
+      // Vérifier la taille (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('L\'image de couverture ne doit pas dépasser 5MB');
+        return;
+      }
+      setImageCouverture(file);
+    }
+  };
+
+  const removeImageCouverture = () => {
+    setImageCouverture(null);
   };
 
   const removeFile = (index) => {
@@ -158,6 +180,19 @@ export default function CreateFormationPage() {
     try {
       setLoading(true);
       
+      // Créer FormData pour l'envoi des fichiers
+      const formDataToSend = new FormData();
+      
+      // Ajouter l'image de couverture si elle existe
+      if (imageCouverture) {
+        formDataToSend.append('image_couverture', imageCouverture);
+      }
+      
+      // Ajouter les fichiers de ressources
+      files.forEach((file, index) => {
+        formDataToSend.append('ressources', file);
+      });
+      
       // Préparer les données pour l'API
       const formationData = {
         ...formData,
@@ -172,8 +207,11 @@ export default function CreateFormationPage() {
           })
         }))
       };
+      
+      // Ajouter les données de formation
+      formDataToSend.append('formation', JSON.stringify(formationData));
 
-      await formationService.createFormation(formationData, files);
+      await formationService.createFormation(formDataToSend);
       alert('Formation créée avec succès !');
       router.push('/dasboard/formation');
     } catch (error) {
@@ -343,9 +381,56 @@ export default function CreateFormationPage() {
           </div>
         </div>
 
-        {/* Gestion des fichiers */}
+        {/* Image de couverture */}
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900">Fichiers de la Formation</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-900">Image de Couverture</h2>
+          
+          <div className="space-y-4">
+            {!imageCouverture ? (
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageCouvertureChange}
+                  className="hidden"
+                  id="image-couverture-upload"
+                />
+                <label htmlFor="image-couverture-upload" className="cursor-pointer">
+                  <Image className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 mb-2">
+                    <span className="font-medium text-blue-600">Cliquez pour sélectionner</span> une image de couverture
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    JPEG, PNG, GIF, WebP (max 5MB)
+                  </p>
+                </label>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Image className="w-8 h-8 text-green-500" />
+                  <div>
+                    <p className="font-medium text-gray-900">{imageCouverture.name}</p>
+                    <p className="text-sm text-gray-500">
+                      {(imageCouverture.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={removeImageCouverture}
+                  className="p-2 hover:bg-red-100 rounded text-red-600 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Gestion des fichiers de ressources */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900">Fichiers de Ressources</h2>
           
           <div className="space-y-4">
             <div>
@@ -356,7 +441,7 @@ export default function CreateFormationPage() {
                 <input
                   type="file"
                   multiple
-                  accept=".pdf,.mp4,.avi,.mov,.mkv"
+                  accept=".pdf,.mp4,.avi,.mov,.mkv,.mpeg,.ogg"
                   onChange={handleFileChange}
                   className="hidden"
                   id="file-upload"
@@ -367,7 +452,7 @@ export default function CreateFormationPage() {
                     <span className="font-medium text-blue-600">Cliquez pour sélectionner</span> ou glissez-déposez
                   </p>
                   <p className="text-sm text-gray-500">
-                    PDF, MP4, AVI, MOV, MKV (max 100MB par fichier)
+                    PDF, MP4, AVI, MOV, MKV, MPEG, OGG (max 100MB par fichier)
                   </p>
                 </label>
               </div>
@@ -534,7 +619,7 @@ export default function CreateFormationPage() {
 
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Index du fichier *
+                                  Fichier associé *
                                 </label>
                                 <select
                                   value={ressource.fileIndex}
@@ -552,13 +637,15 @@ export default function CreateFormationPage() {
                               </div>
                             </div>
 
-                            <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                              <p className="text-sm text-blue-800">
-                                <strong>Note :</strong> Cette ressource utilisera le fichier à l'index {ressource.fileIndex} 
-                                ({ressource.fileIndex !== '' && files[ressource.fileIndex] ? files[ressource.fileIndex].name : 'non sélectionné'}) 
-                                et sera traitée comme un fichier {getResourceTypeLabel(ressource.type)} par le backend.
-                              </p>
-                            </div>
+                            {ressource.fileIndex !== '' && files[ressource.fileIndex] && (
+                              <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                                <p className="text-sm text-blue-800">
+                                  <strong>Fichier sélectionné :</strong> {files[ressource.fileIndex].name} 
+                                  ({getFileTypeLabel(files[ressource.fileIndex])}) - 
+                                  {(files[ressource.fileIndex].size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
