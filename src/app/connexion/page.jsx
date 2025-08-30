@@ -55,6 +55,9 @@ export default function Connexion() {
           toast.success(res.data.message)
           localStorage.setItem('token', res.data.token)
           localStorage.setItem("user", JSON.stringify(res.data.user)); 
+          // Définir aussi un cookie lisible par le middleware côté serveur
+          // 7 jours d'expiration, SameSite=Lax pour éviter les problèmes de redirection
+          document.cookie = `token=${res.data.token}; path=/; max-age=604800; samesite=Lax`;
            router.push('/dasboard')
 
         }

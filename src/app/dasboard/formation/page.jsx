@@ -1,306 +1,258 @@
-'use client'
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, X, Save, Users, Calendar, Clock } from 'lucide-react';
+'use client';
 
-const Formation = () => {
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { formationService } from '../../../service/formation.service';
+import { Plus, Edit, Trash2, Eye, Search, Filter } from 'lucide-react';
+
+export default function FormationPage() {
+  const router = useRouter();
   const [formations, setFormations] = useState([]);
-  const [filteredFormations, setFilteredFormations] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editingFormation, setEditingFormation] = useState(null);
-  const [formData, setFormData] = useState({
-    titre: '',
-    description: '',
-    duree: '',
-    niveau: 'Débutant',
-    prix: '',
-    formateur: '',
-    capaciteMax: '',
-    dateDebut: '',
-    dateFin: '',
-    statut: 'Planifiée'
-  });
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
 
-  // Données d'exemple
+  // Charger les formations et catégories au montage
   useEffect(() => {
-    const formationsExemples = [
-      {
-        id: 1,
-        titre: 'Formation React Avancé',
-        description: 'Maîtrisez React avec hooks, contexte et optimisations',
-        duree: '40h',
-        niveau: 'Avancé',
-        prix: 1200,
-        formateur: 'Thonny',
-        dateDebut: '2025-09-01',
-        dateFin: '2025-09-10',
-        statut: 'Planifiée'
-      },
-      {
-        id: 2,
-        titre: 'JavaScript',
-        description: 'Les nouvelles fonctionnalités de JavaScript moderne',
-        duree: '24h',
-        niveau: 'Intermédiaire',
-        prix: 800,
-        formateur: 'Jean Martin',
-        dateDebut: '2025-08-20',
-        dateFin: '2025-08-25',
-        statut: 'En cours'
-      },
-      {
-        id: 3,
-        titre: 'Base de données MongoDB',
-        description: 'Conception et gestion de bases de données NoSQL',
-        duree: '32h',
-        niveau: 'Intermédiaire',
-        prix: 950,
-        formateur: 'Sophie Bernard',
-        dateDebut: '2025-07-15',
-        dateFin: '2025-07-22',
-        statut: 'Terminée'
-      }
-    ];
-    setFormations(formationsExemples);
-    setFilteredFormations(formationsExemples);
+    loadFormations();
+    loadCategories();
   }, []);
 
-  // Filtrage des formations
-  useEffect(() => {
-    const filtered = formations.filter(formation =>
-      formation.titre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      formation.formateur.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      formation.niveau.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredFormations(filtered);
-  }, [formations, searchTerm]);
-
-  const openModal = (formation = null) => {
-    if (formation) {
-      setEditingFormation(formation);
-      setFormData(formation);
-    } else {
-      setEditingFormation(null);
-      setFormData({
-        titre: '',
-        description: '',
-        duree: '',
-        niveau: 'Débutant',
-        prix: '',
-        formateur: '',
-        capaciteMax: '',
-        dateDebut: '',
-        dateFin: '',
-        statut: 'Planifiée'
-      });
-    }
-    setShowModal(true);
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-    setEditingFormation(null);
-    setFormData({
-      titre: '',
-      description: '',
-      duree: '',
-      niveau: 'Débutant',
-      prix: '',
-      formateur: '',
-      capaciteMax: '',
-      dateDebut: '',
-      dateFin: '',
-      statut: 'Planifiée'
-    });
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleSubmit = () => {
-    // Validation simple
-    if (!formData.titre || !formData.formateur || !formData.duree || !formData.prix || !formData.capaciteMax) {
-      alert('Veuillez remplir tous les champs obligatoires');
-      return;
-    }
-
-    if (editingFormation) {
-      // Modifier une formation existante
-      setFormations(prev => prev.map(formation =>
-        formation.id === editingFormation.id
-          ? { ...formData, id: editingFormation.id, prix: parseFloat(formData.prix), capaciteMax: parseInt(formData.capaciteMax) }
-          : formation
-      ));
-    } else {
-      // Ajouter une nouvelle formation
-      const newFormation = {
-        ...formData,
-        id: Date.now(),
-        prix: parseFloat(formData.prix),
-        capaciteMax: parseInt(formData.capaciteMax)
-      };
-      setFormations(prev => [...prev, newFormation]);
-    }
-
-    closeModal();
-  };
-
-  const handleDelete = (id) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cette formation ?')) {
-      setFormations(prev => prev.filter(formation => formation.id !== id));
+  const loadFormations = async () => {
+    try {
+      setLoading(true);
+      const data = await formationService.getAllFormations();
+      setFormations(data);
+    } catch (error) {
+      console.error('Erreur lors du chargement des formations:', error);
+      alert('Erreur lors du chargement des formations');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatutColor = (statut) => {
-    switch (statut) {
-      case 'Planifiée': return 'bg-blue-100 text-blue-800';
-      case 'En cours': return 'bg-green-100 text-green-800';
-      case 'Terminée': return 'bg-gray-100 text-gray-800';
-      case 'Annulée': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const loadCategories = async () => {
+    try {
+      const data = await formationService.getCategories();
+      setCategories(data);
+    } catch (error) {
+      console.error('Erreur lors du chargement des catégories:', error);
     }
   };
 
-  const getNiveauColor = (niveau) => {
-    switch (niveau) {
-      case 'Débutant': return 'bg-green-100 text-green-800';
-      case 'Intermédiaire': return 'bg-yellow-100 text-yellow-800';
-      case 'Avancé': return 'bg-red-100 text-red-800';
+  const handleDelete = async (id) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette formation ?')) {
+      try {
+        await formationService.deleteFormation(id);
+        alert('Formation supprimée avec succès !');
+        loadFormations();
+      } catch (error) {
+        console.error('Erreur lors de la suppression:', error);
+        alert('Erreur lors de la suppression de la formation');
+      }
+    }
+  };
+
+  const handleEdit = (formation) => {
+    router.push(`/dasboard/formation/edit/${formation.id}`);
+  };
+
+  const handleCreate = () => {
+    router.push('/dasboard/formation/create');
+  };
+
+  const handleView = (formation) => {
+    // Ici vous pouvez ajouter une page de visualisation détaillée
+    alert(`Visualisation de la formation: ${formation.titre_form}`);
+  };
+
+  // Filtrer les formations
+  const filteredFormations = formations.filter(formation => {
+    const matchesSearch = formation.titre_form?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         formation.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = !selectedCategory || formation.id_categ == selectedCategory;
+    const matchesStatus = !selectedStatus || formation.statut_form === selectedStatus;
+    
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Active': return 'bg-green-100 text-green-800';
+      case 'Inactive': return 'bg-red-100 text-red-800';
+      case 'Brouillon': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-center text-3xl font-bold text-gray-900 mb-2">Gestion des Formations</h1>
-          <p className="text-center text-gray-600">Gérez votre catalogue de formations professionnelles</p>
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Gestion des Formations</h1>
+          <p className="text-gray-600 mt-2">Gérez votre catalogue de formations professionnelles</p>
         </div>
+        <button
+          onClick={handleCreate}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          <span>Nouvelle Formation</span>
+        </button>
+      </div>
 
-        {/* Barre d'actions */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Rechercher"
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <button
-              onClick={() => openModal()}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+      {/* Filtres et recherche */}
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Rechercher une formation..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          
+          <div>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <Plus className="w-5 h-5" />
-              Nouvelle Formation
-            </button>
+              <option value="">Toutes les catégories</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.nom_categ}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Tous les statuts</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+              <option value="Brouillon">Brouillon</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Filter className="w-5 h-5 text-gray-400" />
+            <span className="text-sm text-gray-600">
+              {filteredFormations.length} formation(s) trouvée(s)
+            </span>
           </div>
         </div>
+      </div>
 
-        {/* Statistiques */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-10 mb-10">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Total Formations</p>
-                <p className="text-2xl font-bold text-gray-900">{formations.length}</p>
-              </div>
-              <div className="bg-blue-100 p-3 rounded-full">
-                <Calendar className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">En cours</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {formations.filter(f => f.statut === 'En cours').length}
-                </p>
-              </div>
-              <div className="bg-green-100 p-3 rounded-full">
-                <Clock className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Planifiées</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {formations.filter(f => f.statut === 'Planifiée').length}
-                </p>
-              </div>
-              <div className="bg-blue-100 p-3 rounded-full">
-                <Calendar className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </div>
-
+      {/* Liste des formations */}
+      <div className="bg-white rounded-lg shadow-md">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">Liste des Formations</h2>
+        </div>
         
-        </div>
-
-        {/* Liste des formations */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-6 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-2 text-gray-600">Chargement...</p>
+          </div>
+        ) : filteredFormations.length === 0 ? (
+          <div className="p-6 text-center text-gray-500">
+            {formations.length === 0 ? (
+              <div>
+                <p className="text-lg font-medium mb-2">Aucune formation trouvée</p>
+                <p className="text-sm">Commencez par créer votre première formation</p>
+                <button
+                  onClick={handleCreate}
+                  className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                >
+                  Créer une formation
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p className="text-lg font-medium mb-2">Aucune formation ne correspond aux critères</p>
+                <p className="text-sm">Essayez de modifier vos filtres de recherche</p>
+              </div>
+            )}
+          </div>
+        ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Formation</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Formateur</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Niveau</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Durée</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Prix</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Statut</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Formation
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Catégorie
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Statut
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Durée
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Frais
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="bg-white divide-y divide-gray-200">
                 {filteredFormations.map((formation) => (
-                  <tr key={formation.id} className="border-b hover:bg-gray-50">
-                    <td className="py-4 px-4">
-                      <div>
-                        <h3 className="font-medium text-gray-900">{formation.titre}</h3>
-                        <p className="text-gray-600 text-sm">{formation.description}</p>
+                  <tr key={formation.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {formation.titre_form}
+                      </div>
+                      <div className="text-sm text-gray-500 max-w-xs truncate">
+                        {formation.description || 'Aucune description'}
                       </div>
                     </td>
-                    <td className="py-4 px-4 text-gray-700">{formation.formateur}</td>
-                    <td className="py-4 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getNiveauColor(formation.niveau)}`}>
-                        {formation.niveau}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {formation.categorie?.nom_categ || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(formation.statut_form)}`}>
+                        {formation.statut_form}
                       </span>
                     </td>
-                    <td className="py-4 px-4 text-gray-700">{formation.duree}</td>
-                    <td className="py-4 px-4 text-gray-700">{formation.prix}€</td>
-                    <td className="py-4 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatutColor(formation.statut)}`}>
-                        {formation.statut}
-                      </span>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {formation.duree_form ? `${formation.duree_form}h` : 'N/A'}
                     </td>
-                    <td className="py-4 px-4">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {formation.frais_form ? `${formation.frais_form}€` : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
                         <button
-                          onClick={() => openModal(formation)}
-                          className="text-blue-600 hover:text-blue-800 p-1"
+                          onClick={() => handleView(formation)}
+                          className="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded"
+                          title="Voir les détails"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleEdit(formation)}
+                          className="text-green-600 hover:text-green-900 p-1 hover:bg-green-50 rounded"
                           title="Modifier"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(formation.id)}
-                          className="text-red-600 hover:text-red-800 p-1"
+                          className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded"
                           title="Supprimer"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -311,186 +263,9 @@ const Formation = () => {
                 ))}
               </tbody>
             </table>
-            {filteredFormations.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-gray-500">Aucune formation trouvée</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-screen overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  {editingFormation ? 'Modifier la formation' : 'Nouvelle formation'}
-                </h2>
-                <button
-                  onClick={closeModal}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Titre de la formation *
-                    </label>
-                    <input
-                      type="text"
-                      name="titre"
-                      value={formData.titre}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Description
-                    </label>
-                    <textarea
-                      name="description"
-                      value={formData.description}
-                      onChange={handleInputChange}
-                      rows="3"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Formateur *
-                    </label>
-                    <input
-                      type="text"
-                      name="formateur"
-                      value={formData.formateur}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Durée *
-                    </label>
-                    <input
-                      type="text"
-                      name="duree"
-                      value={formData.duree}
-                      onChange={handleInputChange}
-                      required
-                      placeholder="ex: 40h, 5 jours"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Niveau *
-                    </label>
-                    <select
-                      name="niveau"
-                      value={formData.niveau}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="Débutant">Débutant</option>
-                      <option value="Intermédiaire">Intermédiaire</option>
-                      <option value="Avancé">Avancé</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Prix (€) *
-                    </label>
-                    <input
-                      type="number"
-                      name="prix"
-                      value={formData.prix}
-                      onChange={handleInputChange}
-                      required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Date de début
-                    </label>
-                    <input
-                      type="date"
-                      name="dateDebut"
-                      value={formData.dateDebut}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Date de fin
-                    </label>
-                    <input
-                      type="date"
-                      name="dateFin"
-                      value={formData.dateFin}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Statut
-                    </label>
-                    <select
-                      name="statut"
-                      value={formData.statut}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="Planifiée">Planifiée</option>
-                      <option value="En cours">En cours</option>
-                      <option value="Terminée">Terminée</option>
-                      <option value="Annulée">Annulée</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex justify-end space-x-4 pt-6 border-t">
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 transition-colors"
-                  >
-                    {editingFormation ? 'Modifier' : 'Ajouter'}
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>
     </div>
   );
-};
-export default Formation;
+}
