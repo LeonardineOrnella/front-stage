@@ -42,6 +42,7 @@ export default function SideBar() {
     { href: "/dasboard", label: "Accueil", icon: LayoutDashboard, category: "main" },
     { href: "/dasboard/formation", label: "Formations", icon: GraduationCap, category: "main" },
     { href: "/dasboard/chapitre", label: "Chapitres", icon: BookOpen, category: "main" },
+    { href: "/dasboard/profil", label: "Mon Profil", icon: User, category: "main" },
   ]
 
      // Liens spécifiques aux admins
@@ -61,12 +62,11 @@ export default function SideBar() {
 
   // Liens spécifiques aux apprenants
   const apprenantLinks = [
-    { href: "/dasboard/catalogue", label: "Catalogue", icon: GraduationCap, category: "apprenant" },
-    { href: "/dasboard/mes-cours", label: "Mes Cours", icon: BookOpen, category: "apprenant" },
+    { href: "/dasboard/apprenant/catalogue", label: "Catalogue", icon: GraduationCap, category: "apprenant" },
+    { href: "/dasboard/apprenant/mes-cours", label: "Mes Cours", icon: BookOpen, category: "apprenant" },
   ]
 
   const profileLinks = [
-    { href: "/profil", label: "Mon Profil", icon: User },
     { href: "/settings", label: "Paramètres", icon: Settings },
   ]
 

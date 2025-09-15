@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { userService } from '@/service/user.service';
 
 export default function AuthGuard({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -26,14 +28,18 @@ export default function AuthGuard({ children }) {
         }
 
         // Vérifier si l'utilisateur existe
-        const user = localStorage.getItem('user');
-        if (!user) {
+        const userData = localStorage.getItem('user');
+        if (!userData) {
           // Pas d'utilisateur trouvé, rediriger vers la connexion
           localStorage.removeItem('token');
           document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=Lax";
           router.push('/connexion');
           return;
         }
+
+        // Parser les données utilisateur
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
 
         // Vérifier la validité du token (optionnel - vous pouvez ajouter une vérification côté serveur)
         setIsAuthenticated(true);
@@ -73,3 +79,104 @@ export default function AuthGuard({ children }) {
   return null;
 }
 
+// Composant pour protéger les routes admin
+export function AdminGuard({ children }) {
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkAdminAuth = () => {
+      try {
+        const userData = localStorage.getItem('user');
+        if (!userData) {
+          router.push('/connexion');
+          return;
+        }
+
+        const user = JSON.parse(userData);
+        if (user.role !== 'admin') {
+          router.push('/dasboard');
+          return;
+        }
+
+        setIsAuthorized(true);
+      } catch (error) {
+        console.error('Erreur lors de la vérification des droits admin:', error);
+        router.push('/connexion');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAdminAuth();
+  }, [router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Vérification des permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuthorized) {
+    return <>{children}</>;
+  }
+
+  return null;
+}
+
+// Composant pour protéger les routes formateur
+export function FormateurGuard({ children }) {
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkFormateurAuth = () => {
+      try {
+        const userData = localStorage.getItem('user');
+        if (!userData) {
+          router.push('/connexion');
+          return;
+        }
+
+        const user = JSON.parse(userData);
+        if (user.role !== 'formateur' && user.role !== 'admin') {
+          router.push('/dasboard');
+          return;
+        }
+
+        setIsAuthorized(true);
+      } catch (error) {
+        console.error('Erreur lors de la vérification des droits formateur:', error);
+        router.push('/connexion');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkFormateurAuth();
+  }, [router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Vérification des permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuthorized) {
+    return <>{children}</>;
+  }
+
+  return null;
+}
