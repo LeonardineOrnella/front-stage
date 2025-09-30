@@ -1,6 +1,7 @@
 "use client"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { useUser } from "@/components/backoOffice/student/UserContext"
 import { 
   LayoutDashboard, 
   GraduationCap, 
@@ -13,7 +14,10 @@ import {
   Settings,
   Bell,
   FileText,
-  Shield
+  BarChart3,
+  CreditCard,
+  Shield,
+  Wrench
 } from "lucide-react"
 
 export default function SideBar() {
@@ -21,7 +25,7 @@ export default function SideBar() {
   const router = useRouter()
   
   // Note: En production, remplacez par votre méthode de gestion d'état
-  const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem("user") || '{}') : {}
+  const { user } = useUser()
 
   const handleLogout = () => {
     try {
@@ -41,33 +45,43 @@ export default function SideBar() {
   const links = [
     { href: "/dasboard", label: "Accueil", icon: LayoutDashboard, category: "main" },
     { href: "/dasboard/formation", label: "Formations", icon: GraduationCap, category: "main" },
-    { href: "/dasboard/chapitre", label: "Chapitres", icon: BookOpen, category: "main" },
   ]
 
      // Liens spécifiques aux admins
    const adminLinks = [
+     { href: "/dasboard/utilisateurs", label: "Utilisateurs", icon: Users, category: "admin" },
+     { href: "/dasboard/formation", label: "Cours", icon: GraduationCap, category: "admin" },
      { href: "/dasboard/categorie", label: "Catégories", icon: Layers, category: "admin" },
      { href: "/dasboard/formateur", label: "Formateurs", icon: Users, category: "admin" },
-     { href: "/dasboard/utilisateurs", label: "Utilisateurs", icon: User, category: "admin" },
-     { href: "/dasboard/test-roles", label: "Test Rôles", icon: Shield, category: "admin" },
-     { href: "/dasboard/test-simple", label: "Test Simple", icon: Shield, category: "admin" },
+     { href: "/dasboard/statistiques", label: "Statistiques & Rapports", icon: BarChart3, category: "admin" },
+     { href: "/dasboard/parametres", label: "Paramètres", icon: Settings, category: "admin" },
+     { href: "/dasboard/paiements", label: "Paiements & Abonnements", icon: CreditCard, category: "admin" },
+     { href: "/dasboard/moderation", label: "Modération", icon: Shield, category: "admin" },
+     { href: "/dasboard/maintenance", label: "Maintenance", icon: Wrench, category: "admin" },
    ]
 
   // Liens spécifiques aux formateurs
   const formateurLinks = [
-    { href: "/dasboard/mes-formations", label: "Mes Formations", icon: BookOpen, category: "formateur" },
-    { href: "/dasboard/ressources", label: "Mes Ressources", icon: FileText, category: "formateur" },
+    { href: "/dasboard/categorie", label: "Catégories", icon: Layers, category: "formateur" },
+    { href: "/dasboard/quiz", label: "Quiz", icon: Layers, category: "formateur" },
+    { href: "/dasboard/resultats", label: "Resultats", icon: Layers, category: "formateur" },
   ]
 
   // Liens spécifiques aux apprenants
   const apprenantLinks = [
-    { href: "/dasboard/catalogue", label: "Catalogue", icon: GraduationCap, category: "apprenant" },
-    { href: "/dasboard/mes-cours", label: "Mes Cours", icon: BookOpen, category: "apprenant" },
+    { href: "/dasboard/apprenant", label: "Tableau de bord", icon: LayoutDashboard, category: "apprenant" },
+    { href: "/dasboard/apprenant/catalogue", label: "Catalogue", icon: GraduationCap, category: "apprenant" },
+    { href: "/dasboard/apprenant/mesCours", label: "Mes Cours", icon: BookOpen, category: "apprenant" },
+    { href: "/dasboard/apprenant/quiz", label: "Quiz", icon: Layers, category: "apprenant" },
+    { href: "/dasboard/apprenant/progression", label: "Progression", icon: BarChart3, category: "apprenant" },
+    { href: "/dasboard/apprenant/discussions", label: "Discussions", icon: FileText, category: "apprenant" },
+    { href: "/dasboard/apprenant/notifications", label: "Notifications", icon: Bell, category: "apprenant" },
+    { href: "/dasboard/apprenant/certificats", label: "Certificats", icon: Shield, category: "apprenant" },
   ]
 
   const profileLinks = [
-    { href: "/profil", label: "Mon Profil", icon: User },
-    { href: "/settings", label: "Paramètres", icon: Settings },
+    { href: "/dasboard/profil", label: "Mon Profil", icon: User },
+    { href: "/dasboard/parametres", label: "Paramètres", icon: Settings },
   ]
 
   return (
@@ -135,8 +149,8 @@ export default function SideBar() {
           ))}
         </div>
 
-        {/* Section admin */}
-        {user?.role === "admin" && (
+        {/* Section admin (visible uniquement pour admin) */}
+        {user?.role === 'admin' && (
           <div className="mb-6">
             <h3 className="text-xs font-semibold text-emerald-200 uppercase tracking-wider mb-3 px-2">
               Administration
@@ -165,8 +179,8 @@ export default function SideBar() {
           </div>
         )}
 
-        {/* Section formateur */}
-        {user?.role === "formateur" && (
+        {/* Section formateur (visible uniquement pour formateur) */}
+        {user?.role === 'formateur' && (
           <div className="mb-6">
             <h3 className="text-xs font-semibold text-emerald-200 uppercase tracking-wider mb-3 px-2">
               Gestion Formateur
@@ -195,8 +209,8 @@ export default function SideBar() {
           </div>
         )}
 
-        {/* Section apprenant */}
-        {user?.role === "apprenant" && (
+        {/* Section apprenant (visible uniquement pour apprenant) */}
+        {user?.role === 'apprenant' && (
           <div className="mb-6">
             <h3 className="text-xs font-semibold text-emerald-200 uppercase tracking-wider mb-3 px-2">
               Apprentissage

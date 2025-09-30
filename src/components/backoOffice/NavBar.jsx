@@ -12,7 +12,8 @@ import {
   HelpCircle,
   GraduationCap
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useUser } from "@/components/backoOffice/student/UserContext"
 
 export default function NavBar() {
   const pathname = usePathname()
@@ -20,7 +21,11 @@ export default function NavBar() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false)
   
   // Note: En production, remplacez par votre méthode de gestion d'état
-  const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem("user") || '{}') : {}
+  const { user: profile } = useUser()
+
+  const displayName = profile?.nom ? `${profile.nom}${profile.prenom ? ' ' + profile.prenom : ''}` : (profile?.name || 'Utilisateur')
+  const roleLabel = profile?.role === 'admin' ? 'Administrateur' : (profile?.role === 'formateur' ? 'Formateur' : 'Étudiant')
+  const photoUrl = profile?.photo ? `http://localhost:3001${profile.photo}` : null
 
   // Fonction pour obtenir le titre de la page
   const getPageTitle = () => {
@@ -139,17 +144,21 @@ export default function NavBar() {
               onClick={() => setIsProfileOpen(!isProfileOpen)}
               className="flex items-center gap-2 p-2 rounded-lg hover:bg-emerald-50 transition-colors"
             >
-              <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shadow-md">
-                <span className="text-sm font-semibold text-white">
-                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                </span>
-              </div>
+              {photoUrl ? (
+                <img src={photoUrl} alt="Profil" className="w-8 h-8 rounded-full object-cover shadow-md" />
+              ) : (
+                <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shadow-md">
+                  <span className="text-sm font-semibold text-white">
+                    {(profile?.nom?.[0] || profile?.name?.[0] || 'U').toUpperCase()}
+                  </span>
+                </div>
+              )}
               <div className="hidden sm:block text-left">
                 <p className="text-sm font-medium text-emerald-800">
-                  {user?.name || 'Utilisateur'}
+                  {displayName}
                 </p>
                 <p className="text-xs text-emerald-500">
-                  {user?.role === 'admin' ? 'Administrateur' : 'Étudiant'}
+                  {roleLabel}
                 </p>
               </div>
               <ChevronDown className={`w-4 h-4 text-emerald-600 transition-transform ${
@@ -161,13 +170,13 @@ export default function NavBar() {
             {isProfileOpen && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-emerald-100 py-2 z-50">
                 <div className="px-4 py-3 border-b border-emerald-100">
-                  <p className="font-semibold text-emerald-800">{user?.name || 'Utilisateur'}</p>
-                  <p className="text-xs text-emerald-500">{user?.email || 'email@example.com'}</p>
+                  <p className="font-semibold text-emerald-800">{displayName}</p>
+                  <p className="text-xs text-emerald-500">{profile?.email || 'email@example.com'}</p>
                 </div>
                 
                 <div className="py-2">
                   <a
-                    href="/profil"
+                    href="/dasboard/profil"
                     className="flex items-center gap-3 px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors"
                   >
                     <User className="w-4 h-4" />

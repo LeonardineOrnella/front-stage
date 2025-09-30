@@ -1,470 +1,304 @@
-'use client';
+'use client' 
+import React, { useState, useEffect } from 'react'
+import axios from 'axios'
+import { GraduationCap, Mail, Trash2, Search, Eye, Plus, Edit, X } from 'lucide-react'
+import { ToastContainer, toast } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 
-import { useState, useEffect } from 'react';
-import { AdminGuard } from '../../../components/backoOffice/AuthGuard';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  User, 
-  GraduationCap, 
-  Search, 
-  Filter,
-  Eye,
-  Mail,
-  Calendar,
-  CheckCircle,
-  XCircle,
-  BookOpen,
-  Users,
-  TrendingUp,
-  Star
-} from 'lucide-react';
+const API_USERS = "http://localhost:3001/api/users"
 
-export default function FormateurPage() {
-  return (
-    <AdminGuard>
-      <FormateurContent />
-    </AdminGuard>
-  );
-}
+export default function Formateurs() {
+  const [formateurs, setFormateurs] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [showForm, setShowForm] = useState(false)
+  const [editingFormateur, setEditingFormateur] = useState(null)
+  const [viewFormateur, setViewFormateur] = useState(null)
+  const [deleteFormateur, setDeleteFormateur] = useState(null)
 
-function FormateurContent() {
-  const [formateurs, setFormateurs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  const [selectedFormateur, setSelectedFormateur] = useState(null);
+  const itemsPerPage = 5
+  const [formData, setFormData] = useState({ prenom: '', nom: '', email: '', mdp: '', role: 'formateur' })
 
-  // Données de test (remplacer par l'API)
   useEffect(() => {
-    const mockFormateurs = [
-      { 
-        id: 1, 
-        nom: 'Dupont', 
-        prenom: 'Jean', 
-        email: 'jean.dupont@elearn.com', 
-        status: 'active', 
-        createdAt: '2024-01-20',
-        lastLogin: '2024-12-19',
-        formations: 3,
-        apprenants: 25,
-        specialite: 'Développement Web',
-        experience: '5 ans',
-        note: 4.8,
-        bio: 'Expert en développement web avec une passion pour l\'enseignement'
-      },
-      { 
-        id: 2, 
-        nom: 'Martin', 
-        prenom: 'Marie', 
-        email: 'marie.martin@elearn.com', 
-        status: 'active', 
-        createdAt: '2024-01-25',
-        lastLogin: '2024-12-18',
-        formations: 2,
-        apprenants: 18,
-        specialite: 'Design UX/UI',
-        experience: '3 ans',
-        note: 4.6,
-        bio: 'Designer créative spécialisée dans l\'expérience utilisateur'
-      },
-      { 
-        id: 3, 
-        nom: 'Leroy', 
-        prenom: 'Thomas', 
-        email: 'thomas.leroy@elearn.com', 
-        status: 'active', 
-        createdAt: '2024-02-10',
-        lastLogin: '2024-12-17',
-        formations: 1,
-        apprenants: 12,
-        specialite: 'Marketing Digital',
-        experience: '4 ans',
-        note: 4.7,
-        bio: 'Spécialiste en marketing digital et stratégies de croissance'
-      },
-      { 
-        id: 4, 
-        nom: 'Dubois', 
-        prenom: 'Sophie', 
-        email: 'sophie.dubois@elearn.com', 
-        status: 'inactive', 
-        createdAt: '2024-02-15',
-        lastLogin: '2024-11-20',
-        formations: 0,
-        apprenants: 0,
-        specialite: 'Gestion de Projet',
-        experience: '6 ans',
-        note: 4.5,
-        bio: 'Chef de projet expérimentée en gestion agile'
-      },
-      { 
-        id: 5, 
-        nom: 'Rousseau', 
-        prenom: 'Pierre', 
-        email: 'pierre.rousseau@elearn.com', 
-        status: 'active', 
-        createdAt: '2024-02-20',
-        lastLogin: '2024-12-20',
-        formations: 4,
-        apprenants: 32,
-        specialite: 'Data Science',
-        experience: '7 ans',
-        note: 4.9,
-        bio: 'Data scientist passionné par l\'intelligence artificielle'
+    fetchFormateurs()
+  }, [])
+
+  const fetchFormateurs = async () => {
+    try {
+      const res = await axios.get(API_USERS)
+      const onlyFormateurs = res.data.filter(u => u.role === 'formateur')
+      setFormateurs(onlyFormateurs)
+    } catch (err) {
+      toast.error("Erreur lors du chargement des formateurs")
+      console.error(err)
+    }
+  }
+
+  // Filtrage
+  const filteredFormateurs = formateurs.filter(f =>
+    f.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    f.prenom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    f.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  // Pagination
+  const totalPages = Math.ceil(filteredFormateurs.length / itemsPerPage)
+  const paginatedFormateurs = filteredFormateurs.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+
+  // Supprimer
+  const handleDelete = async () => {
+    if (!deleteFormateur) return
+    try {
+      await axios.delete(`${API_USERS}/${deleteFormateur.id}`)
+      setFormateurs(prev => prev.filter(f => f.id !== deleteFormateur.id))
+      toast.success("Formateur supprimé avec succès")
+      setDeleteFormateur(null)
+    } catch (err) {
+      toast.error("Erreur lors de la suppression")
+      console.error(err)
+    }
+  }
+
+  // Ajouter ou Modifier
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+
+    const payload = {
+      prenom: formData.prenom.trim(),
+      nom: formData.nom.trim(),
+      email: formData.email.trim(),
+      role: "formateur"
+    }
+
+    if (!editingFormateur && formData.mdp.trim() !== "") {
+      payload.mdp = formData.mdp
+    }
+
+    try {
+      if (editingFormateur) {
+        const res = await axios.put(`${API_USERS}/${editingFormateur.id}`, payload)
+        setFormateurs(prev =>
+          prev.map(f => f.id === editingFormateur.id ? res.data : f)
+        )
+        toast.success("Formateur modifié avec succès")
+      } else {
+        const res = await axios.post(API_USERS, payload)
+        setFormateurs(prev => [...prev, res.data])
+        toast.success("Formateur ajouté avec succès")
       }
-    ];
-    
-    setTimeout(() => {
-      setFormateurs(mockFormateurs);
-      setLoading(false);
-    }, 1000);
-  }, []);
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800 border-green-200';
-      case 'inactive': return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      setShowForm(false)
+      setEditingFormateur(null)
+      setFormData({ prenom: '', nom: '', email: '', mdp: '', role: 'formateur' })
+    } catch (err) {
+      toast.error("Erreur lors de l'enregistrement")
+      console.error(err.response?.data || err.message)
     }
-  };
+  }
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'active': return <CheckCircle className="w-4 h-4" />;
-      case 'inactive': return <XCircle className="w-4 h-4" />;
-      default: return <User className="w-4 h-4" />;
-    }
-  };
-
-  const getNoteColor = (note) => {
-    if (note >= 4.5) return 'text-green-600';
-    if (note >= 4.0) return 'text-blue-600';
-    if (note >= 3.5) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const filteredFormateurs = formateurs.filter(formateur => {
-    const matchesSearch = 
-      formateur.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      formateur.prenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      formateur.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      formateur.specialite.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = !selectedStatus || formateur.status === selectedStatus;
-    
-    return matchesSearch && matchesStatus;
-  });
-
-  // Calculs de pagination
-  const totalPages = Math.ceil(filteredFormateurs.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentFormateurs = filteredFormateurs.slice(startIndex, endIndex);
-
-  const goToPage = (page) => setCurrentPage(page);
-  const goToNextPage = () => currentPage < totalPages && goToPage(currentPage + 1);
-  const goToPreviousPage = () => currentPage > 1 && goToPage(currentPage - 1);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedStatus]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-            <div className="h-96 bg-gray-200 rounded-lg"></div>
-          </div>
-        </div>
-      </div>
-    );
+  // Préparer édition
+  const handleEdit = (formateur) => { 
+    setEditingFormateur(formateur)
+    setFormData({
+      prenom: formateur.prenom || '',
+      nom: formateur.nom || '',
+      email: formateur.email || '',
+      mdp: '',
+      role: 'formateur'
+    })
+    setShowForm(true)
   }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* En-tête */}
-        <div className="mb-8">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestion des Formateurs</h1>
-              <p className="text-gray-600">Gérez les formateurs et leurs spécialités</p>
+      <ToastContainer />
+      <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200">
+        
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <GraduationCap className="w-6 h-6 text-blue-500" />
+            Formateurs ({formateurs.length})
+          </h1>
+          <div className="flex items-center gap-2 mt-2 sm:mt-0">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Rechercher..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
             </div>
             <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl"
+              onClick={() => { setShowForm(true); setEditingFormateur(null) }}
+              className="ml-3 flex items-center gap-1 bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600"
             >
-              <Plus className="w-5 h-5" />
-              Ajouter un Formateur
+              <Plus className="w-4 h-4" /> Ajouter
             </button>
           </div>
-
-          {/* Statistiques */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Formateurs</p>
-                  <p className="text-3xl font-bold text-blue-600">{formateurs.length}</p>
-                </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <GraduationCap className="w-6 h-6 text-blue-600" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Formateurs Actifs</p>
-                  <p className="text-3xl font-bold text-green-600">{formateurs.filter(f => f.status === 'active').length}</p>
-                </div>
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Formations</p>
-                  <p className="text-3xl font-bold text-purple-600">{formateurs.reduce((sum, f) => sum + f.formations, 0)}</p>
-                </div>
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <BookOpen className="w-6 h-6 text-purple-600" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Apprenants</p>
-                  <p className="text-3xl font-bold text-emerald-600">{formateurs.reduce((sum, f) => sum + f.apprenants, 0)}</p>
-                </div>
-                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                  <Users className="w-6 h-6 text-emerald-600" />
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Filtres */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+        {/* Formulaire */}
+        {showForm && (
+          <div className="p-6 border-b border-gray-200 bg-gray-50">
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Prénom"
+                value={formData.prenom}
+                onChange={(e) => setFormData({ ...formData, prenom: e.target.value })}
+                className="border rounded-lg p-2"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Nom"
+                value={formData.nom}
+                onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
+                className="border rounded-lg p-2"
+                required
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="border rounded-lg p-2 col-span-2"
+                required
+              />
+              {!editingFormateur && (
                 <input
-                  type="text"
-                  placeholder="Rechercher un formateur..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  type="password"
+                  placeholder="Mot de passe"
+                  value={formData.mdp}
+                  onChange={(e) => setFormData({ ...formData, mdp: e.target.value })}
+                  className="border rounded-lg p-2 col-span-2"
+                  required
                 />
+              )}
+              <div className="flex gap-2 col-span-2">
+                <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">
+                  {editingFormateur ? "Modifier" : "Ajouter"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowForm(false); setEditingFormateur(null) }}
+                  className="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500 flex items-center gap-1"
+                >
+                  <X className="w-4 h-4" /> Annuler
+                </button>
               </div>
-            </div>
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-white"
-              >
-                <option value="">Tous les statuts</option>
-                <option value="active">Actif</option>
-                <option value="inactive">Inactif</option>
-              </select>
-            </div>
+            </form>
           </div>
-        </div>
+        )}
 
-        {/* Liste des formateurs */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h2 className="text-lg font-semibold text-gray-900">Liste des Formateurs</h2>
-          </div>
-          
-          {currentFormateurs.length === 0 ? (
-            <div className="p-12 text-center text-gray-500">
-              <GraduationCap className="w-20 h-20 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg">Aucun formateur trouvé</p>
-              <p className="text-sm">Essayez de modifier vos critères de recherche</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Formateur
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Spécialité
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Statut
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Performance
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Activité
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {currentFormateurs.map((formateur) => (
-                    <tr key={formateur.id} className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                            <span className="text-lg font-bold text-white">
-                              {formateur.prenom.charAt(0).toUpperCase()}{formateur.nom.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-semibold text-gray-900">
-                              {formateur.prenom} {formateur.nom}
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-500">
-                              <Mail className="w-4 h-4" />
-                              {formateur.email}
-                            </div>
-                            <div className="text-xs text-gray-400 mt-1">
-                              {formateur.experience} d'expérience
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          <div className="font-medium">{formateur.specialite}</div>
-                          <div className="text-xs text-gray-500 mt-1">{formateur.bio}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          {getStatusIcon(formateur.status)}
-                          <span className={`ml-2 px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(formateur.status)}`}>
-                            {formateur.status === 'active' ? 'Actif' : 'Inactif'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Star className={`w-5 h-5 ${getNoteColor(formateur.note)}`} />
-                          <span className={`text-sm font-semibold ${getNoteColor(formateur.note)}`}>
-                            {formateur.note}/5.0
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <BookOpen className="w-4 h-4 text-purple-500" />
-                            <span>{formateur.formations} formation(s)</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Users className="w-4 h-4 text-emerald-500" />
-                            <span>{formateur.apprenants} apprenant(s)</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-500">
-                            <Calendar className="w-4 h-4" />
-                            <span>Dernière connexion: {new Date(formateur.lastLogin).toLocaleDateString('fr-FR')}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-2">
-                          <button 
-                            onClick={() => setSelectedFormateur(formateur)}
-                            className="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg transition-colors"
-                            title="Voir détails"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors" title="Modifier">
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors" title="Supprimer">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* Table */}
+        <div className="overflow-x-auto mt-4">
+          <table className="min-w-full divide-y divide-gray-200 shadow-sm rounded-lg overflow-hidden">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nom & Prénom</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Email</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Rôle</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {paginatedFormateurs.map((formateur, idx) => (
+                <tr key={formateur.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50 hover:bg-gray-100"}>
+                  <td className="px-6 py-4 font-medium text-gray-900">{formateur.prenom} {formateur.nom}</td>
+                  <td className="px-6 py-4 text-gray-700 flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-gray-400" /> {formateur.email}
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                      {formateur.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 flex gap-3 justify-center">
+                    <button onClick={() => setViewFormateur(formateur)} className="text-blue-600 hover:text-blue-800 transition-colors">
+                      <Eye className="w-5 h-5" />
+                    </button>
+                    <button onClick={() => handleEdit(formateur)} className="text-green-600 hover:text-green-800 transition-colors">
+                      <Edit className="w-5 h-5" />
+                    </button>
+                    <button onClick={() => setDeleteFormateur(formateur)} className="text-red-600 hover:text-red-800 transition-colors">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {paginatedFormateurs.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-center py-10 text-gray-500">Aucun formateur trouvé</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center mt-4 gap-2">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-3 py-1 rounded-lg ${currentPage === page ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                >
+                  {page}
+                </button>
+              ))}
             </div>
           )}
         </div>
+      </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mt-6">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-700">
-                Affichage de <span className="font-medium">{startIndex + 1}</span> à{' '}
-                <span className="font-medium">
-                  {Math.min(endIndex, filteredFormateurs.length)}
-                </span>{' '}
-                sur <span className="font-medium">{filteredFormateurs.length}</span> formateurs
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={goToPreviousPage}
-                  disabled={currentPage === 1}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                    currentPage === 1
-                      ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
-                  }`}
-                >
-                  Précédent
-                </button>
-                
-                <div className="flex items-center space-x-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => goToPage(page)}
-                      className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                        page === currentPage
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </div>
-                
-                <button
-                  onClick={goToNextPage}
-                  disabled={currentPage === totalPages}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                    currentPage === totalPages
-                      ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
-                  }`}
-                >
-                  Suivant
-                </button>
-              </div>
+      {/* Modal détails */}
+      {viewFormateur && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg p-6 w-96">
+            <h2 className="text-lg font-bold mb-4">Détails du formateur</h2>
+            <p><strong>Prénom:</strong> {viewFormateur.prenom}</p>
+            <p><strong>Nom:</strong> {viewFormateur.nom}</p>
+            <p><strong>Email:</strong> {viewFormateur.email}</p>
+            <button
+              onClick={() => setViewFormateur(null)}
+              className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal suppression */}
+      {deleteFormateur && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg p-6 w-96">
+            <h2 className="text-lg font-bold mb-4 text-red-600">Confirmation</h2>
+            <p>Voulez-vous vraiment supprimer <strong>{deleteFormateur.prenom} {deleteFormateur.nom}</strong> ?</p>
+            <div className="flex gap-3 mt-6 justify-end">
+              <button
+                onClick={() => setDeleteFormateur(null)}
+                className="px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Supprimer
+              </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
-  );
+  )
 }

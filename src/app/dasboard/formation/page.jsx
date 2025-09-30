@@ -19,6 +19,7 @@ export default function FormationPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const router = useRouter();
+  
 
   useEffect(() => {
     fetchData();

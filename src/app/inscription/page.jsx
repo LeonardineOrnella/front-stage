@@ -61,7 +61,7 @@ export default function Inscription() {
                 nom,
                 prenom,
                 mdp,
-                role: "admin"
+                role: "apprenant"
             });
 
             toast.success(res.data.message);

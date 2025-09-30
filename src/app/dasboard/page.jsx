@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useUser } from '@/components/backoOffice/student/UserContext';
 import { useRouter } from 'next/navigation';
 import { formationService } from '../../service/formation.service';
 import { 
@@ -20,6 +21,7 @@ import {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { user } = useUser();
   const [stats, setStats] = useState({
     totalFormations: 0,
     activeFormations: 0,
@@ -117,6 +119,19 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* CTA Catalogue pour Apprenant */}
+      {user?.role === 'apprenant' && (
+        <div className="bg-white border rounded-xl p-6 flex items-center justify-between gap-6">
+          <div>
+            <h2 className="text-lg font-semibold">Parcourir le catalogue des cours</h2>
+            <p className="text-sm text-gray-600">Consultez les descriptions et aperçus, puis inscrivez-vous avant d'accéder au cours.</p>
+          </div>
+          <a href="/dasboard/apprenant/catalogue" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+            Voir le catalogue
+          </a>
+        </div>
+      )}
 
       {/* Statistiques principales */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -4,11 +4,13 @@ import AuthGuard from "@/components/backoOffice/AuthGuard";
 import ErrorBoundary from "@/components/backoOffice/ErrorBoundary";
 import NotificationManager from "@/components/backoOffice/NotificationManager";
 import "./dashboard.css";
+import { UserProvider } from "@/components/backoOffice/student/UserContext";
 
 export default function RootLayoutAdmin({ children }) {
     return (
         <ErrorBoundary>
             <AuthGuard>
+                <UserProvider>
                 <div className='flex h-screen bg-gray-50'>
                     {/* Sidebar fixe */}
                     <div className="flex-shrink-0">
@@ -28,6 +30,7 @@ export default function RootLayoutAdmin({ children }) {
                         </div>
                     </div>
                 </div>
+                </UserProvider>
                 <NotificationManager />
             </AuthGuard>
         </ErrorBoundary>

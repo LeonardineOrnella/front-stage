@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Edit, Trash2, Search, X } from 'lucide-react';
+import RequireRole from '@/components/backoOffice/RequireRole'
 
 const API_CHAP = "http://localhost:3001/api/chapitres";
 const API_CAT = "http://localhost:3001/api/categories";
@@ -108,6 +109,7 @@ const Chapitres = () => {
   };
 
   return (
+    <RequireRole roles={['formateur','admin']}>
     <div className="min-h-screen bg-gray-50 p-6 w-full">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
@@ -292,6 +294,7 @@ const Chapitres = () => {
         )}
       </div>
     </div>
+    </RequireRole>
   );
 };
 
