@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { BookOpen, Clock, Play, CheckCircle, Award, Download, Eye, BarChart3 } from 'lucide-react';
-import { userService } from '@/service/user.service';
+import { formationService } from '@/service/formation.service';
+import { transactionService } from '@/service/transaction.service';
 import axios from '@/lib/axios';
 import { toast } from 'react-toastify';
+ 
 
 export default function MesCoursPage() {
+  const router = useRouter();
   const [mesFormations, setMesFormations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState('en-cours');
@@ -23,51 +27,87 @@ export default function MesCoursPage() {
       if (!userData) return;
 
       const user = JSON.parse(userData);
-      
-      // Simuler des données pour la démonstration
-      const mockData = [
-        {
-          id_form: 1,
-          titre_form: "Formation React Avancé",
-          description: "Maîtrisez React avec hooks et contexte",
-          progression: 75,
-          statut: "en-cours",
-          duree_form: 40,
-          chapitres_termines: 6,
-          chapitres_total: 8,
-          date_inscription: "2024-01-15",
-          derniere_activite: "2024-01-20",
-          certificat_disponible: false
-        },
-        {
-          id_form: 2,
-          titre_form: "JavaScript ES6+",
-          description: "Les nouvelles fonctionnalités de JavaScript",
-          progression: 100,
-          statut: "termine",
-          duree_form: 25,
-          chapitres_termines: 5,
-          chapitres_total: 5,
-          date_inscription: "2023-12-01",
-          date_completion: "2024-01-10",
-          certificat_disponible: true
-        },
-        {
-          id_form: 3,
-          titre_form: "Node.js et Express",
-          description: "Développement backend avec Node.js",
-          progression: 30,
-          statut: "en-cours",
-          duree_form: 35,
-          chapitres_termines: 2,
-          chapitres_total: 7,
-          date_inscription: "2024-01-18",
-          derniere_activite: "2024-01-19",
-          certificat_disponible: false
-        }
-      ];
+      // Récupérer les transactions de l'utilisateur (formats robustes)
+      const transRes = await transactionService.getUserTransactions(user.id);
+      const raw = transRes?.data;
+      const transactions = Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : Array.isArray(raw?.results) ? raw.results : []);
 
-      setMesFormations(mockData);
+      // IDs des formations avec statut validé
+      const validatedIds = new Set(
+        transactions
+          .filter(t => String(t.statut_trans || '').toLowerCase() === 'validee')
+          .map(t => Number(t.id_form))
+          .filter(Boolean)
+      );
+
+      // Sécurité: si aucune n'est détectée comme validée, vérifier via check-payment pour toutes les formations présentes dans les transactions
+      if (validatedIds.size === 0 && transactions.length > 0) {
+        const candidateIds = [...new Set(transactions.map(t => Number(t.id_form)).filter(Boolean))];
+        for (const fid of candidateIds) {
+          try {
+            const hasPaid = await transactionService.checkFormationAccess(fid, user.id);
+            if (hasPaid) validatedIds.add(fid);
+          } catch {}
+        }
+      }
+
+      // Charger les détails de chaque formation validée
+      const formations = [];
+      for (const formId of validatedIds) {
+        try {
+          const data = await formationService.getFormationById(formId);
+          const src = Array.isArray(data?.formation) ? data.formation[0] : (data?.formation || data?.data || data);
+          if (src) {
+            formations.push({
+              id_form: src.id_form ?? src.id,
+              titre_form: src.titre_form ?? src.titre ?? 'Formation',
+              description: src.description ?? '',
+              progression: 0,
+              statut: 'en-cours',
+              duree_form: src.duree_form ?? null,
+              chapitres_termines: 0,
+              chapitres_total: Array.isArray(src.chapitres) ? src.chapitres.length : (Array.isArray(src.mchapitres) ? src.mchapitres.length : 0),
+              date_inscription: validated.find(v => Number(v.id_form) === Number(formId))?.date_trans || new Date().toISOString(),
+              derniere_activite: null,
+              certificat_disponible: false
+            });
+          }
+        } catch (e) {
+          // ignore formation fetch error and continue
+        }
+      }
+
+      // Fallback: si aucune formation détectée via transactions, vérifier via toutes les formations
+      if (formations.length === 0) {
+        try {
+          const all = await formationService.getAllFormations();
+          const list = Array.isArray(all?.data) ? all.data : (Array.isArray(all?.formations) ? all.formations : (Array.isArray(all) ? all : []));
+          for (const f of list) {
+            const fid = Number(f.id_form ?? f.id);
+            if (!fid) continue;
+            try {
+              const hasPaid = await transactionService.checkFormationAccess(fid, user.id);
+              if (hasPaid) {
+                formations.push({
+                  id_form: fid,
+                  titre_form: f.titre_form ?? f.titre ?? 'Formation',
+                  description: f.description ?? '',
+                  progression: 0,
+                  statut: 'en-cours',
+                  duree_form: f.duree_form ?? null,
+                  chapitres_termines: 0,
+                  chapitres_total: Array.isArray(f.chapitres) ? f.chapitres.length : (Array.isArray(f.mchapitres) ? f.mchapitres.length : 0),
+                  date_inscription: new Date().toISOString(),
+                  derniere_activite: null,
+                  certificat_disponible: false
+                });
+              }
+            } catch {}
+          }
+        } catch {}
+      }
+
+      setMesFormations(formations);
     } catch (error) {
       console.error('Erreur lors du chargement des formations:', error);
       toast.error('Erreur lors du chargement de vos formations');
@@ -96,16 +136,11 @@ export default function MesCoursPage() {
 
   const handleContinuerFormation = async (formationId) => {
     try {
-      const userData = localStorage.getItem('user');
-      if (!userData) return;
-
-      const user = JSON.parse(userData);
-      await userService.suivreFormation(user.id, formationId);
-      toast.success('Redirection vers la formation...');
-      window.location.href = `/dasboard/apprenant/formation/${formationId}`;
+      toast.success('Redirection vers le contenu...');
+      router.push(`/dasboard/apprenant/formation/${formationId}/contenu`);
     } catch (error) {
       console.error('Erreur lors de l\'accès à la formation:', error);
-      toast.error('Erreur lors de l\'accès à la formation');
+      toast.error('Erreur d\'accès au contenu');
     }
   };
 
@@ -129,7 +164,7 @@ export default function MesCoursPage() {
       toast.success('Certificat téléchargé avec succès');
     } catch (error) {
       console.error('Erreur lors du téléchargement:', error);
-      toast.error('Erreur lors du téléchargement du certificat');
+      toast.error(t('student.my_courses.certificate_error'));
     }
   };
 
@@ -179,8 +214,8 @@ export default function MesCoursPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Mes Formations</h1>
-          <p className="text-gray-600">Suivez votre progression et accédez à vos cours</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Mes formations</h1>
+          <p className="text-gray-600">Retrouvez vos cours et votre progression</p>
         </div>
 
         {/* Statistiques */}
@@ -188,7 +223,7 @@ export default function MesCoursPage() {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Formations</p>
+                <p className="text-sm font-medium text-gray-600">Total</p>
                 <p className="text-3xl font-bold text-gray-900">{mesFormations.length}</p>
               </div>
               <BookOpen className="w-8 h-8 text-blue-600" />
@@ -197,7 +232,7 @@ export default function MesCoursPage() {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">En Cours</p>
+                <p className="text-sm font-medium text-gray-600">En cours</p>
                 <p className="text-3xl font-bold text-blue-600">
                   {mesFormations.filter(f => f.statut === 'en-cours').length}
                 </p>
@@ -282,20 +317,8 @@ export default function MesCoursPage() {
                       </h3>
                     </div>
                     <p className="text-gray-600 mb-4">{formation.description}</p>
-                    
-                    {/* Barre de progression */}
-                    <div className="mb-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-gray-700">Progression</span>
-                        <span className="text-sm font-medium text-gray-900">{formation.progression}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${getProgressColor(formation.progression)}`}
-                          style={{ width: `${formation.progression}%` }}
-                        ></div>
-                      </div>
-                    </div>
+               
+                   
                   </div>
                 </div>
               </div>
@@ -313,12 +336,12 @@ export default function MesCoursPage() {
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <BarChart3 className="w-4 h-4" />
-                    <span>Inscrit le {new Date(formation.date_inscription).toLocaleDateString('fr-FR')}</span>
+                    <span>Inscrit le {new Date(formation.date_inscription).toLocaleDateString()}</span>
                   </div>
                   {formation.derniere_activite && (
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Eye className="w-4 h-4" />
-                      <span>Vu le {new Date(formation.derniere_activite).toLocaleDateString('fr-FR')}</span>
+                      <span>Vu le {new Date(formation.derniere_activite).toLocaleDateString()}</span>
                     </div>
                   )}
                 </div>
@@ -326,7 +349,7 @@ export default function MesCoursPage() {
                 {/* QCM liés à la formation */}
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Quiz disponibles</span>
+                    <span className="text-sm font-medium text-gray-700">QCM</span>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
                       {(qcmsByFormation[formation.id_form]?.length) || 0}
                     </span>
@@ -341,22 +364,20 @@ export default function MesCoursPage() {
                       )}
                     </ul>
                   ) : (
-                    <p className="text-sm text-gray-500">Aucun quiz pour le moment.</p>
+                    <p className="text-sm text-gray-500">Aucun QCM pour cette formation</p>
                   )}
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center justify-between">
                   <div className="flex gap-2">
-                    {formation.statut === 'en-cours' && (
-                      <button
-                        onClick={() => handleContinuerFormation(formation.id_form)}
-                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2"
-                      >
-                        <Play className="w-4 h-4" />
-                        Continuer
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleContinuerFormation(formation.id_form)}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2"
+                    >
+                      <BookOpen className="w-4 h-4" />
+                      Voir le contenu
+                    </button>
                     <button
                       onClick={() => {
                         const firstQcm = (qcmsByFormation[formation.id_form] || [])[0];
@@ -368,7 +389,7 @@ export default function MesCoursPage() {
                       className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${qcmsByFormation[formation.id_form]?.length > 0 ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
                     >
                       <BarChart3 className="w-4 h-4" />
-                      Participer au quiz
+                      Faire un QCM
                     </button>
                     {formation.statut === 'termine' && (
                       <button

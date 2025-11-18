@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   getQcms,
   createQcm,
@@ -13,7 +13,8 @@ import { QuestionService } from "@/service/question.service";
 import { createReponse, getReponsesByQuestion } from "@/service/reponse.service";
 import { formationService } from "@/service/formation.service";
 import axios from "@/lib/axios";
-import { Pencil, Trash2, Save, X, Plus, RefreshCcw } from "lucide-react";
+import { Pencil, Trash2, Save, X, Plus, RefreshCcw, ChevronDown, ChevronRight, Search } from "lucide-react";
+ 
 
 const inputBase = "border border-gray-300 rounded-lg px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition";
 const btnBase = "inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1";
@@ -50,6 +51,26 @@ export default function QuizPage() {
 
   // Tabs: "list" | "create"
   const [activeTab, setActiveTab] = useState("list");
+  const [qcmQuery, setQcmQuery] = useState("");
+  const filteredQcms = useMemo(() => {
+    const q = qcmQuery.trim().toLowerCase();
+    if (!q) return qcms;
+    return qcms.filter((item) => {
+      const title = String(item?.titre_qcm || "").toLowerCase();
+      const formation = String(item?.formation?.titre_form || "").toLowerCase();
+      return title.includes(q) || formation.includes(q);
+    });
+  }, [qcms, qcmQuery]);
+  const formationQuestionCounts = useMemo(() => {
+    const counts = {};
+    (qcms || []).forEach((item) => {
+      const formationId = item?.formation?.id_form;
+      const qCount = Array.isArray(item?.questions) ? item.questions.length : 0;
+      if (!formationId) return;
+      counts[formationId] = (counts[formationId] || 0) + qCount;
+    });
+    return counts;
+  }, [qcms]);
 
   // Deep list expand state
   const [expandedQcmIds, setExpandedQcmIds] = useState(new Set());
@@ -104,14 +125,14 @@ export default function QuizPage() {
   // Créer un QCM (rapide) - retiré de l'UI mais conservé si besoin futur
   const handleCreateQcm = async () => {
     const titre = newQcmTitle.trim();
-    if (!titre) return alert("Veuillez saisir un titre");
+    if (!titre) return alert('Saisissez un titre de QCM');
     try {
       setCreatingQcm(true);
       await createQcm({ titre_qcm: titre });
       setNewQcmTitle("");
       fetchQcms();
     } catch (err) {
-      const msg = err?.response?.data?.error || err?.message || "Erreur lors de la création du QCM";
+      const msg = err?.response?.data?.error || err?.message || 'Erreur lors de la création du QCM';
       alert(msg);
     } finally {
       setCreatingQcm(false);
@@ -196,8 +217,8 @@ export default function QuizPage() {
   const handleDeleteQcm = (id) => {
     setConfirmState({
       open: true,
-      title: "Confirmation",
-      message: "Voulez-vous vraiment supprimer ce QCM ?",
+      title: 'Confirmation',
+      message: 'Supprimer ce QCM ? Cette action est irréversible.',
       onConfirm: () => deleteQcmById(id),
     });
   };
@@ -206,7 +227,7 @@ export default function QuizPage() {
   const handleAddInlineQuestion = async (qcmId) => {
     const text = (newQuestionByQcm[qcmId] || "").trim();
     const answers = newQuestionAnswersByQcm[qcmId] || [];
-    if (!text) return alert("Saisissez la question");
+    if (!text) return alert('Saisissez la question');
     try {
       const created = await QuestionService.create({ quest: text, point: 1 });
       // We need the id of the created question; backend should return it
@@ -323,7 +344,7 @@ export default function QuizPage() {
   };
   const saveEditQuestion = async (quest) => {
     const text = editingQuestionText.trim();
-    if (!text) return alert("Le texte de la question est requis");
+    if (!text) return alert('La question est requise');
     try {
       await QuestionService.update(quest.id_quest, { quest: text, point: quest.point ?? 1 });
       // Save answers changes for this question
@@ -357,7 +378,7 @@ export default function QuizPage() {
   const saveEditAnswer = async (answer) => {
     const { updateReponse } = await import("@/service/reponse.service");
     const texte = editingAnswerData.texte.trim();
-    if (!texte) return alert("Le texte de la réponse est requis");
+    if (!texte) return alert('La réponse est requise');
     try {
       await updateReponse(answer.id_rep, { texte, est_correcte: editingAnswerData.est_correcte ? 1 : 0 });
       cancelEditAnswer();
@@ -424,7 +445,11 @@ export default function QuizPage() {
 
   const handleDeleteAllAnswersForQuestion = async (quest) => {
     if (!quest?.reponses?.length) return;
-    if (!confirm("Supprimer toutes les réponses de cette question ?")) return;
+    setConfirmState({
+      open: true,
+      title: 'Confirmation',
+      message: 'Supprimer toutes les réponses de cette question ?',
+      onConfirm: async () => {
     try {
       const { deleteReponse } = await import("@/service/reponse.service");
       for (const r of quest.reponses) {
@@ -433,7 +458,11 @@ export default function QuizPage() {
       await fetchQcms();
     } catch (e) {
       alert(e?.response?.data?.error || e.message || "Erreur lors de la suppression des réponses");
+        } finally {
+          setConfirmState((s)=>({ ...s, open:false }));
     }
+      }
+    });
   };
 
   // Helper: load responses for an array of questions (kept for old list usage)
@@ -464,7 +493,7 @@ export default function QuizPage() {
   // Ajouter une question directement au QCM sélectionné
   const handleCreateQuestion = async () => {
     if (!selectedQcm) return alert("Sélectionnez un QCM");
-    if (!newQuestionText.trim()) return alert("Saisissez la question");
+    if (!newQuestionText.trim()) return alert('Saisissez la question');
     const created = await QuestionService.create({ quest: newQuestionText.trim(), point: 1 });
     const allQ = await QuestionService.getAll();
     const createdQ = allQ.find(q => q.quest === newQuestionText.trim());
@@ -479,7 +508,7 @@ export default function QuizPage() {
 
   // Ajouter une question au QCM
   const handleAddQuestion = async () => {
-    if (!selectedQuestion) return alert("Sélectionner une question");
+    if (!selectedQuestion) return alert('Sélectionnez une question');
     await addQuestionToQcm(selectedQcm.id_qcm, selectedQuestion);
     const data = await getQuestionsByQcm(selectedQcm.id_qcm);
     setQuestions(data);
@@ -495,13 +524,11 @@ export default function QuizPage() {
         <div className="px-6 py-6 bg-gradient-to-r from-emerald-50 to-blue-50 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Gestion des QCM</h1>
-              <p className="mt-1 text-sm text-gray-600">Liste avancée et création.</p>
+              <h1 className="text-2xl font-bold text-gray-900">QCM</h1>
+              <p className="mt-1 text-sm text-gray-600">Gérez vos questions et réponses</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
-                {qcms.length} QCM
-              </span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">{qcms.length} QCM</span>
             </div>
           </div>
 
@@ -511,13 +538,13 @@ export default function QuizPage() {
               className={`px-4 py-2 rounded-lg border text-sm ${activeTab === "list" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-50"}`}
               onClick={() => setActiveTab("list")}
             >
-              Liste avancée
+              Liste
             </button>
             <button
               className={`px-4 py-2 rounded-lg border text-sm ${activeTab === "create" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-50"}`}
               onClick={() => setActiveTab("create")}
             >
-              Création avancée
+              Créer
             </button>
           </div>
         </div>
@@ -527,22 +554,39 @@ export default function QuizPage() {
             <>
               {/* Liste QCM (deep) */}
               <div className="rounded-lg border border-gray-200 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-semibold">Liste des QCM (hiérarchique)</h2>
-                  <button
-                    onClick={fetchQcms}
-                    className="p-2 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    title="Rafraîchir"
-                    type="button"
-                  >
-                    <RefreshCcw className="w-4 h-4" />
-                  </button>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+                  <h2 className="font-semibold">Liste des QCM</h2>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="relative flex-1 sm:w-72">
+                      <input
+                        type="text"
+                        value={qcmQuery}
+                        onChange={(e) => setQcmQuery(e.target.value)}
+                        placeholder="Rechercher un QCM ou une formation"
+                        className={inputBase + " w-full pl-9"}
+                      />
+                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    </div>
+                    <button
+                      onClick={fetchQcms}
+                      className="p-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                      title="Rafraîchir"
+                      type="button"
+                    >
+                      <RefreshCcw className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                {qcms.length === 0 ? (
-                  <div className="text-sm text-gray-500">Aucun QCM trouvé.</div>
+                {filteredQcms.length === 0 ? (
+                  <div className="text-sm text-gray-500 flex items-center justify-between bg-gray-50 border border-dashed border-gray-200 rounded-lg px-3 py-2">
+                    <span>Aucun QCM ne correspond à votre recherche.</span>
+                    {qcms.length > 0 ? (
+                      <button onClick={() => setQcmQuery("")} className="text-blue-600 hover:underline text-xs" type="button">Effacer le filtre</button>
+                    ) : null}
+                  </div>
                 ) : (
                   <ul className="divide-y">
-                    {qcms.map((qcm) => (
+                    {filteredQcms.map((qcm) => (
                       <li key={qcm.id_qcm} className="py-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -551,12 +595,26 @@ export default function QuizPage() {
                               onClick={() => toggleQcmExpand(qcm.id_qcm)}
                               title={expandedQcmIds.has(qcm.id_qcm) ? 'Réduire' : 'Développer'}
                             >
-                              {expandedQcmIds.has(qcm.id_qcm) ? '-' : '+'}
+                              {expandedQcmIds.has(qcm.id_qcm) ? (
+                                <ChevronDown className="w-4 h-4" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4" />
+                              )}
                             </button>
                             <div>
-                              <div className="font-medium">{qcm.titre_qcm}</div>
+                              <div className="font-medium flex items-center gap-2">
+                                <span>{qcm.titre_qcm}</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-700 border border-gray-200">
+                                  {(qcm.questions?.length || 0)} questions
+                                </span>
+                              </div>
                               {qcm.formation && (
-                                <div className="text-xs text-gray-500">Formation: {qcm.formation.titre_form}</div>
+                                <div className="text-xs text-gray-500 flex items-center gap-2">
+                                  <span>Formation: {qcm.formation.titre_form}</span>
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] bg-blue-50 text-blue-700 border border-blue-200">
+                                    {(formationQuestionCounts[qcm.formation.id_form] || 0)} questions
+                                  </span>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -604,13 +662,13 @@ export default function QuizPage() {
                         </div>
 
                         {expandedQcmIds.has(qcm.id_qcm) && (
-                          <div className="mt-3 ml-11">
+                          <div className="mt-3 ml-11 transition-all duration-200 ease-out transform opacity-100 translate-y-0">
                             {(!qcm.questions || qcm.questions.length === 0) ? (
                               <div className="text-sm text-gray-500">Aucune question.</div>
                             ) : (
                               <ul className="space-y-2">
                                 {qcm.questions.map((quest) => (
-                                  <li key={quest.id_quest} className="border rounded p-3">
+                                  <li key={quest.id_quest} className="border rounded p-3 hover:bg-gray-50">
                                     <div className="flex items-start justify-between gap-3">
                                       <div className="flex-1">
                                         {editingAllQcmId === qcm.id_qcm ? (
@@ -647,8 +705,8 @@ export default function QuizPage() {
                                           </div>
                                         ) : (
                                           <div>
-                                    <div className="font-medium">{quest.quest}</div>
-                                    <div className="text-xs text-gray-500">Points: {quest.point ?? 1}</div>
+                                            <div className="font-medium">{quest.quest}</div>
+                                            <div className="text-xs text-gray-500">Points: {quest.point ?? 1}</div>
                                           </div>
                                         )}
                                       </div>
@@ -721,7 +779,7 @@ export default function QuizPage() {
                                               ) : (
                                                 <>
                                                   <div className="flex-1">
-                                              <span className={r.est_correcte ? "text-emerald-600 font-medium" : "text-gray-700"}>{r.texte}</span>
+                                                    <span className={r.est_correcte ? "text-emerald-600 font-medium" : "text-gray-700"}>{r.texte}</span>
                                                     {r.est_correcte ? <span className="text-emerald-600 text-xs ml-1">(correcte)</span> : null}
                                                   </div>
                                                   <div className="flex items-center gap-2" />
@@ -835,36 +893,36 @@ export default function QuizPage() {
 
           {activeTab === "create" && (
             <>
-              {/* Création avancée QCM + Questions + Réponses */}
+          {/* Création avancée QCM + Questions + Réponses */}
               <div className="rounded-lg border border-gray-200 p-4">
-                <h2 className="font-semibold mb-3">Création avancée</h2>
+            <h2 className="font-semibold mb-3">Créer un QCM complet</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Titre du QCM</label>
+                <label className="block text-sm font-medium text-gray-700">Titre du QCM</label>
                     <input
                       type="text"
-                      placeholder="Ex: QCM JavaScript débutant"
+                  placeholder={'Ex. QCM Chapitre 1'}
                       value={deepTitle}
                       onChange={(e) => setDeepTitle(e.target.value)}
                       className={inputBase}
                     />
-                    <p className="text-xs text-gray-400 mt-1">Obligatoire • 50 caractères max</p>
+                <p className="text-xs text-gray-400 mt-1">Un titre court et explicite</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Formation liée</label>
+                <label className="block text-sm font-medium text-gray-700">Formation liée</label>
                     <select
                       value={deepFormationId}
                       onChange={(e) => setDeepFormationId(e.target.value)}
                       className={inputBase}
                     >
-                      <option value="">Sélectionner une formation</option>
+                  <option value="">Sélectionner une formation</option>
                       {formations.map((f) => (
                         <option key={f.id_form} value={f.id_form}>
                           {f.titre_form}
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-gray-400 mt-1">Choisissez où rattacher ce QCM</p>
+                <p className="text-xs text-gray-400 mt-1">Permet de rattacher le QCM à une formation</p>
                   </div>
                   <div className="flex items-end">
                     <button
@@ -872,7 +930,7 @@ export default function QuizPage() {
                       className={`${btnPrimary} w-full`}
                       type="button"
                     >
-                      + Ajouter une question
+                  + Ajouter une question
                     </button>
                   </div>
                 </div>
@@ -884,7 +942,7 @@ export default function QuizPage() {
                         <div className="flex items-center gap-2 flex-1">
                           <input
                             type="text"
-                            placeholder={`Question #${qi + 1}`}
+                        placeholder={`Question #${qi + 1}`}
                             value={q.quest}
                             onChange={(e) => handleDeepQuestionChange(qi, "quest", e.target.value)}
                             className={inputBase + " flex-1"}
@@ -903,7 +961,7 @@ export default function QuizPage() {
                           type="button"
                           onClick={() => handleRemoveDeepQuestion(qi)}
                         >
-                          Supprimer
+                      Retirer
                         </button>
                       </div>
 
@@ -912,7 +970,7 @@ export default function QuizPage() {
                           <div key={ri} className="flex items-center gap-2">
                             <input
                               type="text"
-                              placeholder={`Réponse #${ri + 1}`}
+                          placeholder={`Réponse #${ri + 1}`}
                               value={r.texte}
                               onChange={(e) => handleDeepReponseChange(qi, ri, "texte", e.target.value)}
                               className={inputBase + " flex-1"}
@@ -924,14 +982,14 @@ export default function QuizPage() {
                                 checked={!!r.est_correcte}
                                 onChange={(e) => handleDeepReponseChange(qi, ri, "est_correcte", e.target.checked ? 1 : 0)}
                               />
-                              <span>Correcte</span>
+                          <span>Correcte</span>
                             </label>
                             <button
                               className="text-red-600 px-2 py-1 rounded hover:bg-red-50"
                               type="button"
                               onClick={() => handleRemoveDeepReponse(qi, ri)}
                             >
-                              Retirer
+                          Retirer
                             </button>
                           </div>
                         ))}
@@ -940,7 +998,7 @@ export default function QuizPage() {
                           type="button"
                           onClick={() => handleAddDeepReponse(qi)}
                         >
-                          + Ajouter une réponse
+                      + Ajouter une réponse
                         </button>
                       </div>
                     </div>
@@ -952,21 +1010,21 @@ export default function QuizPage() {
                     className={btnSecondary}
                     type="button"
                   >
-                    Annuler
+                Réinitialiser
                   </button>
                   <button
                     onClick={() => setShowPreview(true)}
                     className={btnSecondary}
                     type="button"
                   >
-                    Aperçu
+                Aperçu
                   </button>
                   <button
                     onClick={handleSubmitDeep}
                     className={btnSuccess}
                     disabled={creatingDeep}
                   >
-                    {creatingDeep ? "Création..." : "Créer le QCM complet"}
+                {creatingDeep ? 'Création…' : 'Créer le QCM'}
                   </button>
                 </div>
               </div>
@@ -981,14 +1039,14 @@ export default function QuizPage() {
                     >
                       ✕
                     </button>
-                    <h3 className="text-lg font-semibold mb-4">Aperçu du QCM</h3>
+                <h3 className="text-lg font-semibold mb-4">Aperçu</h3>
                     <div className="space-y-2 mb-4">
                       <div>
-                        <div className="text-sm text-gray-500">Titre</div>
+                    <div className="text-sm text-gray-500">Titre</div>
                         <div className={`font-medium ${!deepTitle.trim() ? 'text-red-600' : ''}`}>{deepTitle || '—'}</div>
                       </div>
                       <div>
-                        <div className="text-sm text-gray-500">Formation</div>
+                    <div className="text-sm text-gray-500">Formation</div>
                         <div className={`font-medium ${!deepFormationId ? 'text-red-600' : ''}`}>
                           {formations.find(f => String(f.id_form) === String(deepFormationId))?.titre_form || '—'}
                         </div>
@@ -997,16 +1055,16 @@ export default function QuizPage() {
                     <div className="space-y-3 max-h-[55vh] overflow-auto pr-1">
                       {deepQuestions.map((q, i) => (
                         <div key={i} className="border rounded p-3">
-                          <div className="font-medium">{q.quest || <span className="text-red-600">(question manquante)</span>}</div>
-                          <div className="text-xs text-gray-500">Points: {q.point ?? 1}</div>
+                      <div className="font-medium">{q.quest || <span className="text-red-600">Question manquante</span>}</div>
+                      <div className="text-xs text-gray-500">Points: {q.point ?? 1}</div>
                           <div className="mt-2 pl-3 border-l">
-                            {!q.reponses?.length ? (
-                              <div className="text-sm text-red-600">Aucune réponse</div>
+                        {!q.reponses?.length ? (
+                          <div className="text-sm text-red-600">Aucune réponse</div>
                             ) : (
                               <ul className="space-y-1">
                                 {q.reponses.map((r, ri) => (
                                   <li key={ri} className="text-sm flex items-center gap-2">
-                                    <span className={!r.texte?.trim() ? 'text-red-600' : ''}>{r.texte || '(réponse manquante)'}</span>
+                                <span className={!r.texte?.trim() ? 'text-red-600' : ''}>{r.texte || 'Réponse manquante'}</span>
                                     {r.est_correcte ? <span className="text-emerald-600 text-xs">(correcte)</span> : null}
                                   </li>
                                 ))}
@@ -1017,9 +1075,9 @@ export default function QuizPage() {
                       ))}
                     </div>
                     <div className="mt-4 flex justify-end gap-2">
-                      <button onClick={() => setShowPreview(false)} className={btnSecondary}>Modifier</button>
+                  <button onClick={() => setShowPreview(false)} className={btnSecondary}>Modifier</button>
                       <button onClick={handleSubmitDeep} disabled={creatingDeep} className={btnSuccess}>
-                        {creatingDeep ? 'Création...' : 'Confirmer et créer'}
+                    {creatingDeep ? 'Création…' : 'Confirmer et créer'}
                       </button>
                     </div>
                   </div>

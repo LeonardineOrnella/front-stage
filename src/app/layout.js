@@ -3,7 +3,7 @@ import "./globals.css";
 
 import Header from "@/components/frontOffice/Header.jsx";
 
-import { ToastContainer } from "react-toastify";
+import ToastMount from "@/components/ToastMount.jsx";
 import 'react-toastify/dist/ReactToastify.css';
 
 const geistSans = localFont({
@@ -24,21 +24,12 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
-        <ToastContainer 
-          position="top-right"
-          autoClose={3000}
-          hideProgressBar={false}
-          newestOnTop={false}
-          closeOnClick
-          pauseOnHover
-          draggable
-          
-        />
+        <ToastMount />
       </body>
     </html>
   );

@@ -2,10 +2,12 @@
 import Link from 'next/link';
 import React, { useState, useEffect } from 'react';
 import { Menu, X, BookOpen, Users, Mail, Home } from 'lucide-react';
+ 
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  
 
   useEffect(() => {
     const handleScroll = () => {
@@ -41,7 +43,7 @@ export default function Header() {
             <div className={`text-2xl font-bold ${
               isScrolled ? 'text-emerald-600' : 'text-white'
             }`}>
-              Formation Excellence
+              UN-IT
             </div>
           </div>
 
@@ -118,6 +120,7 @@ export default function Header() {
             >
               Inscription
             </Link>
+            
           </div>
 
           {/* Bouton menu mobile */}
@@ -182,6 +185,7 @@ export default function Header() {
                 >
                   Inscription
                 </Link>
+                
               </div>
             </nav>
           </div>

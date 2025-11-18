@@ -6,6 +6,7 @@ import { Eye, EyeOff, User, Mail, Lock, BookOpen, ArrowLeft, CheckCircle, AlertC
 import { userService } from '@/service/user.service';
 import { toast } from 'react-toastify';
 import Link from 'next/link';
+ 
 
 export default function Inscription() {
     const router = useRouter();
@@ -75,31 +76,44 @@ export default function Inscription() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-100">
-            {/* Header avec retour */}
-            <div className="absolute top-6 left-6">
-                <Link 
-                    href="/"
-                    className="flex items-center space-x-2 text-emerald-600 hover:text-emerald-700 transition-colors"
-                >
-                    <ArrowLeft className="w-5 h-5" />
-                    <span className="font-medium">Retour à l'accueil</span>
-                </Link>
+        <div className="min-h-screen relative">
+            {/* Image de fond */}
+            <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{
+                    backgroundImage: "url('https://images.unsplash.com/photo-1522202176988-66273c2fd55f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2071&q=80')"
+                }}
+            >
+                {/* Overlay pour améliorer la lisibilité */}
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/60 via-emerald-800/50 to-emerald-900/60"></div>
             </div>
+            
+            {/* Contenu principal */}
+            <div className="relative z-10 min-h-screen">
+                {/* Header avec retour */}
+                <div className="absolute top-6 left-6">
+                    <Link 
+                        href="/"
+                        className="flex items-center space-x-2 text-white hover:text-emerald-200 transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                        <span className="font-medium">Accueil</span>
+                    </Link>
+                </div>
 
-            <div className="min-h-screen flex items-center justify-center p-4">
-                <div className="w-full max-w-md">
-                    {/* Header */}
-                    <div className="text-center mb-8">
-                        <div className="w-20 h-20 bg-emerald-600 rounded-full mx-auto mb-6 flex items-center justify-center shadow-xl transform hover:scale-105 transition-all duration-300">
-                            <User className="w-10 h-10 text-white" />
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="w-full max-w-md">
+                        {/* Header */}
+                        <div className="text-center mb-8">
+                            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full mx-auto mb-6 flex items-center justify-center shadow-xl transform hover:scale-105 transition-all duration-300 border border-white/30">
+                                <User className="w-10 h-10 text-white" />
+                            </div>
+                            <h1 className="text-4xl font-bold text-white mb-2 drop-shadow-lg">Créer un compte</h1>
+                            <p className="text-white/90 drop-shadow-md">Rejoignez la plateforme et commencez à apprendre</p>
                         </div>
-                        <h1 className="text-4xl font-bold text-gray-800 mb-2">Inscription</h1>
-                        <p className="text-gray-600">Créez votre compte et commencez votre formation</p>
-                    </div>
 
-                    {/* Carte principale */}
-                    <div className="bg-white/90 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-emerald-100">
+                        {/* Carte principale */}
+                        <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white/20">
                         {error && (
                             <div className="mb-6 p-4 rounded-2xl bg-red-50 text-red-700 border border-red-200 flex items-center space-x-3">
                                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -118,32 +132,28 @@ export default function Inscription() {
                             {/* Nom et Prénom */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <label className="block text-sm font-semibold text-gray-700 ml-1">
-                                        Prénom
-                                    </label>
+                                    <label className="block text-sm font-semibold text-gray-700 ml-1">Prénom</label>
                                     <div className="relative group">
                                         <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
                                         <input
                                             type="text"
-                                            placeholder="Votre prénom"
+                                            placeholder={'Votre prénom'}
                                             value={prenom}
-                                            className="w-full pl-12 pr-4 py-4 bg-gray-50/50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300"
+                                            className="w-full pl-12 pr-4 py-4 bg-white border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300 text-gray-900 placeholder:text-gray-400"
                                             onChange={(e) => setPrenom(e.target.value)}
                                         />
                                     </div>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="block text-sm font-semibold text-gray-700 ml-1">
-                                        Nom
-                                    </label>
+                                    <label className="block text-sm font-semibold text-gray-700 ml-1">Nom</label>
                                     <div className="relative group">
                                         <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
                                         <input
                                             type="text"
-                                            placeholder="Votre nom"
+                                            placeholder={'Votre nom'}
                                             value={nom}
-                                            className="w-full pl-12 pr-4 py-4 bg-gray-50/50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300"
+                                            className="w-full pl-12 pr-4 py-4 bg-white border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300 text-gray-900 placeholder:text-gray-400"
                                             onChange={(e) => setNom(e.target.value)}
                                         />
                                     </div>
@@ -152,16 +162,14 @@ export default function Inscription() {
 
                             {/* Email */}
                             <div className="space-y-2">
-                                <label className="block text-sm font-semibold text-gray-700 ml-1">
-                                    Email
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 ml-1">Email</label>
                                 <div className="relative group">
                                     <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
                                     <input
                                         type="email"
-                                        placeholder="exemple@email.com"
+                                        placeholder="email@example.com"
                                         value={email}
-                                        className="w-full pl-12 pr-4 py-4 bg-gray-50/50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300"
+                                        className="w-full pl-12 pr-4 py-4 bg-white border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300 text-gray-900 placeholder:text-gray-400"
                                         onChange={(e) => setMail(e.target.value)}
                                     />
                                 </div>
@@ -169,16 +177,14 @@ export default function Inscription() {
 
                             {/* Mot de passe */}
                             <div className="space-y-2">
-                                <label className="block text-sm font-semibold text-gray-700 ml-1">
-                                    Mot de passe
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 ml-1">Mot de passe</label>
                                 <div className="relative group">
                                     <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
                                     <input
                                         type={showMdp ? "text" : "password"}
                                         placeholder="••••••••"
                                         value={mdp}
-                                        className="w-full pl-12 pr-12 py-4 bg-gray-50/50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300"
+                                        className="w-full pl-12 pr-12 py-4 bg-white border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300 text-gray-900 placeholder:text-gray-400"
                                         onChange={(e) => setMdp(e.target.value)}
                                     />
                                     <button
@@ -193,16 +199,14 @@ export default function Inscription() {
 
                             {/* Confirmation mot de passe */}
                             <div className="space-y-2">
-                                <label className="block text-sm font-semibold text-gray-700 ml-1">
-                                    Confirmer le mot de passe
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 ml-1">Confirmer le mot de passe</label>
                                 <div className="relative group">
                                     <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
                                     <input
                                         type={showConfirmMdp ? "text" : "password"}
                                         placeholder="••••••••"
                                         value={confirmMdp}
-                                        className="w-full pl-12 pr-12 py-4 bg-gray-50/50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300"
+                                        className="w-full pl-12 pr-12 py-4 bg-white border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all duration-300 text-gray-900 placeholder:text-gray-400"
                                         onChange={(e) => setConfirmMdp(e.target.value)}
                                     />
                                     <button
@@ -224,17 +228,17 @@ export default function Inscription() {
                                 {isLoading ? (
                                     <div className="flex items-center justify-center space-x-2">
                                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        <span>Inscription en cours...</span>
+                                        <span>Création en cours…</span>
                                     </div>
                                 ) : (
-                                    "Créer mon compte"
+                                    'Créer un compte'
                                 )}
                             </button>
                         </form>
 
                         {/* Lien connexion */}
                         <p className="text-center text-gray-600 mt-8">
-                            Déjà un compte ?{" "}
+                            Vous avez déjà un compte ? {" "}
                             <Link
                                 href="/connexion"
                                 className="text-emerald-600 hover:text-emerald-700 font-semibold hover:underline transition-colors"
@@ -246,5 +250,6 @@ export default function Inscription() {
                 </div>
             </div>
         </div>
+    </div>
     );
 }

@@ -4,13 +4,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Clock, Filter, Search, Star, Eye } from 'lucide-react';
 import { formationService } from '@/service/formation.service';
+import { transactionService } from '@/service/transaction.service';
 import { toast } from 'react-toastify';
+ 
 
 export default function CataloguePage() {
   const router = useRouter();
   const [formations, setFormations] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [formationsInscrites, setFormationsInscrites] = useState(new Set());
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -21,6 +24,15 @@ export default function CataloguePage() {
 
   useEffect(() => {
     loadCatalogue();
+    loadFormationsInscrites();
+    // Inject global search from navbar if present
+    try {
+      const q = typeof window !== 'undefined' ? sessionStorage.getItem('globalSearch') : null;
+      if (q) {
+        setSearchTerm(q);
+        sessionStorage.removeItem('globalSearch');
+      }
+    } catch {}
   }, []);
 
   const loadCatalogue = async () => {
@@ -34,13 +46,35 @@ export default function CataloguePage() {
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
     } catch (e) {
       console.error(e);
-      toast.error("Erreur lors du chargement du catalogue");
+      toast.error('Le chargement a échoué');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInscription = (formation) => {
+  const loadFormationsInscrites = async () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      if (!token) {
+        setFormationsInscrites(new Set());
+        return;
+      }
+      const transactionsResponse = await transactionService.getMyTransactions();
+      const transactions = transactionsResponse.data?.data || [];
+      const formationsInscritesIds = new Set(
+        transactions
+          .filter(t => String(t.statut_trans || '').toLowerCase() === 'validee')
+          .map(t => Number(t.id_form))
+          .filter(Boolean)
+      );
+      setFormationsInscrites(formationsInscritesIds);
+    } catch (error) {
+      console.error('Erreur lors du chargement des formations inscrites:', error);
+      setFormationsInscrites(new Set());
+    }
+  };
+
+  const handleInscription = async (formation) => {
     try {
       // Log debug demandé
       // eslint-disable-next-line no-console
@@ -57,6 +91,14 @@ export default function CataloguePage() {
       toast.error('Vous devez être connecté pour vous inscrire');
       return;
     }
+    // Si déjà inscrit/validé, diriger vers le contenu
+    try {
+      const has = await transactionService.checkFormationAccess(formation.id_form);
+      if (has) {
+        router.push(`/dasboard/apprenant/formation/${formation.id_form}/contenu`);
+        return;
+      }
+    } catch {}
     router.push(`/dasboard/apprenant/checkout/${formation.id_form}`);
   };
 
@@ -110,8 +152,8 @@ export default function CataloguePage() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Catalogue des Formations</h1>
-          <p className="text-gray-600">Parcourez le catalogue, lisez les descriptions et aperçus, puis inscrivez-vous.</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Catalogue</h1>
+          <p className="text-gray-600">Parcourez l'ensemble des formations</p>
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
@@ -121,7 +163,7 @@ export default function CataloguePage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
                   type="text"
-                  placeholder="Rechercher une formation…"
+                  placeholder={'Rechercher une formation...'}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -143,24 +185,12 @@ export default function CataloguePage() {
               </select>
             </div>
 
-            <div>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-              >
-                <option value="pertinence">Tri: Pertinence</option>
-                <option value="prix-asc">Prix: croissant</option>
-                <option value="prix-desc">Prix: décroissant</option>
-                <option value="duree-asc">Durée: croissante</option>
-                <option value="duree-desc">Durée: décroissante</option>
-              </select>
-            </div>
+           
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-          <div className="text-sm text-gray-700">{filtered.length} formation(s) trouvée(s)</div>
+          <div className="text-sm text-gray-700">{filtered.length} {filtered.length === 1 ? 'résultat' : 'résultats'}</div>
         </div>
 
         {loading ? (
@@ -172,8 +202,8 @@ export default function CataloguePage() {
         ) : filtered.length === 0 ? (
           <div className="bg-white p-12 rounded-xl shadow-sm border border-gray-200 text-center">
             <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune formation trouvée</h3>
-            <p className="text-gray-600">Essayez d'élargir vos critères de recherche.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune formation</h3>
+            <p className="text-gray-600">Aucune formation ne correspond</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -203,16 +233,25 @@ export default function CataloguePage() {
                       <button
                         onClick={() => router.push(`/dasboard/apprenant/formation/${f.id_form}`)}
                         className="p-2 text-gray-500 hover:text-emerald-600"
-                        title="Voir détails"
+                        title={'Voir les détails'}
                       >
                         <Eye className="w-5 h-5" />
                       </button>
-                      <button
-                        onClick={() => handleInscription(f)}
-                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-                      >
-                        S'inscrire
-                      </button>
+                      {formationsInscrites.has(Number(f.id_form)) ? (
+                        <button
+                          onClick={() => router.push(`/dasboard/apprenant/formation/${f.id_form}`)}
+                          className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                        >
+                          Accéder
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleInscription(f)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                          S'inscrire
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -224,7 +263,7 @@ export default function CataloguePage() {
         {filtered.length > 0 && (
           <div className="mt-8 flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-gray-200">
             <div className="text-sm text-gray-700">
-              Affichage de <span className="font-medium">{startIndex + 1}</span> à <span className="font-medium">{Math.min(startIndex + itemsPerPage, filtered.length)}</span> sur <span className="font-medium">{filtered.length}</span>
+              {`${startIndex + 1}–${Math.min(startIndex + itemsPerPage, filtered.length)} sur ${filtered.length}`}
             </div>
             <div className="flex items-center gap-2">
               <button

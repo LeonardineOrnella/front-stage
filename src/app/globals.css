@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Dark theme CSS variables (optional) */
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+}
+
+.dark {
+  --background: #0b1220;
+  --foreground: #f8fafc;
+}
+
+/* Apply variables to base elements only; avoid forcing colors globally */
+html, body {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
 /* Styles personnalisés pour les formations */
 .line-clamp-2 {
   display: -webkit-box;

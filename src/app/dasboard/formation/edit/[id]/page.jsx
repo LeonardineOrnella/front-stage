@@ -2,8 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import ConfirmModal from '../../../../../components/backoOffice/ConfirmModal';
+import axios from '../../../../../lib/axios';
 import { formationService } from '../../../../../service/formation.service';
-import { ArrowLeft, Plus, X, Upload, FileText, Video, File, Save } from 'lucide-react';
+import { chapService } from '../../../../../service/chap.service';
+import { toast } from 'react-toastify';
+import { ressourceService } from '../../../../../service/ressource.service';
+import { ArrowLeft, Plus, X, Upload, FileText, Video, File, Save, Trash2 } from 'lucide-react';
 
 export default function EditFormationPage() {
   const router = useRouter();
@@ -15,6 +20,8 @@ export default function EditFormationPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [files, setFiles] = useState([]);
   const [existingFiles, setExistingFiles] = useState([]);
+  const [newResourceFiles, setNewResourceFiles] = useState({}); // { `${chapitreIndex}-${ressourceIndex}`: File }
+  const [confirmState, setConfirmState] = useState({ open:false, title:'', message:'', onConfirm:null });
   const [formData, setFormData] = useState({
     titre_form: '',
     description: '',
@@ -36,21 +43,26 @@ export default function EditFormationPage() {
       setInitialLoading(true);
       const [categoriesData, formationData] = await Promise.all([
         formationService.getCategories(),
-        formationService.getFormationById(formationId)
+        formationService.getFormationById(Number(formationId))
       ]);
       
       setCategories(categoriesData);
       
       // Préparer les données de la formation
+      if (!formationData || !formationData.id_form) {
+        alert('Formation introuvable');
+        router.push('/dasboard/formation');
+        return;
+      }
       setFormData({
         titre_form: formationData.titre_form || '',
         description: formationData.description || '',
         statut_form: formationData.statut_form || 'Active',
         duree_form: formationData.duree_form || '',
         frais_form: formationData.frais_form || '',
-        date_form: formationData.date_form ? formationData.date_form.split('T')[0] : '',
+        date_form: formationData.date_form ? String(formationData.date_form).split('T')[0] : '',
         id_categ: formationData.id_categ || '',
-        chapitres: formationData.chapitres || []
+        chapitres: Array.isArray(formationData.chapitres) ? formationData.chapitres : []
       });
 
       // Si la formation a des fichiers existants, les stocker
@@ -76,6 +88,11 @@ export default function EditFormationPage() {
   const handleFileChange = (e) => {
     const newFiles = Array.from(e.target.files);
     setFiles(prev => [...prev, ...newFiles]);
+  };
+
+  const handleNewResourceFileChange = (chapitreIndex, ressourceIndex, file) => {
+    const key = `${chapitreIndex}-${ressourceIndex}`;
+    setNewResourceFiles(prev => ({ ...prev, [key]: file || undefined }));
   };
 
   const removeFile = (index) => {
@@ -147,10 +164,27 @@ export default function EditFormationPage() {
   };
 
   const removeChapitre = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      chapitres: prev.chapitres.filter((_, i) => i !== index)
-    }));
+    const chapitre = formData.chapitres[index];
+    setConfirmState({
+      open: true,
+      title: 'Supprimer le chapitre',
+      message: `Êtes-vous sûr de vouloir supprimer le chapitre "${chapitre.titre_chap || `Chapitre ${chapitre.ordre}`}" ?`,
+      onConfirm: async () => {
+        try {
+      if (chapitre.id_chap) {
+            await axios.delete(`/chapitres/${chapitre.id_chap}`);
+      }
+      setFormData(prev => ({
+        ...prev,
+        chapitres: prev.chapitres.filter((_, i) => i !== index)
+      }));
+    } catch (error) {
+      console.error('Erreur lors de la suppression du chapitre:', error);
+        } finally {
+          setConfirmState((s)=>({ ...s, open:false }));
+        }
+    }
+    });
   };
 
   const removeRessource = (chapitreIndex, ressourceIndex) => {
@@ -202,12 +236,49 @@ export default function EditFormationPage() {
         }))
       };
 
-      await formationService.updateFormation(formationId, formationData, files);
-      alert('Formation mise à jour avec succès !');
+      await formationService.updateFormation(formationId, formationData);
+
+      // Créer les nouveaux chapitres ajoutés (sans id_chap)
+      const nouveauxChapitres = (formData.chapitres || []).filter(ch => !ch.id_chap);
+      for (const ch of nouveauxChapitres) {
+        // Validation minimale
+        if (!String(ch.titre_chap || '').trim()) continue;
+        const payload = {
+          titre_chap: ch.titre_chap,
+          ordre: ch.ordre || 1,
+          type: ch.type || 'Publié',
+          duree: ch.duree || '',
+          id_form: Number(formationId),
+          id_categ: ch.id_categ || formData.id_categ,
+        };
+        try { await chapService.create(payload); } catch (_) { /* ignore single failure; overall toast below */ }
+      }
+
+      // Créer les nouvelles ressources avec fichier uploadé (si présent)
+      for (let ci = 0; ci < formData.chapitres.length; ci++) {
+        const chapitre = formData.chapitres[ci];
+        const chapitreId = chapitre.id_chap; // peut être undefined si nouveau
+        // si chapitre vient d'être créé, recharger ses chapitres et mapper? Simplifions: upload via page ressources dédiée si pas d'id
+        if (!chapitreId) continue;
+        for (let ri = 0; ri < (chapitre.ressources || []).length; ri++) {
+          const ressource = chapitre.ressources[ri];
+          if (ressource.id_res) continue; // déjà existante
+          const fileKey = `${ci}-${ri}`;
+          const file = newResourceFiles[fileKey];
+          if (!file) continue; // pas de fichier à uploader ici
+          try {
+            await ressourceService.create({ id_chap: chapitreId, type: ressource.type || 'pdf', file });
+          } catch (e2) {
+            console.error('Upload ressource échoué', e2);
+          }
+        }
+      }
+
+      toast.success('Formation mise à jour avec succès');
       router.push('/dasboard/formation');
     } catch (error) {
       console.error('Erreur lors de la mise à jour:', error);
-      alert('Erreur lors de la mise à jour de la formation');
+      toast.error(error?.response?.data?.error || 'Erreur lors de la mise à jour de la formation');
     } finally {
       setLoading(false);
     }
@@ -363,6 +434,7 @@ export default function EditFormationPage() {
                 name="date_form"
                 value={formData.date_form}
                 onChange={handleInputChange}
+                min={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -406,66 +478,7 @@ export default function EditFormationPage() {
           </div>
         )}
 
-        {/* Ajout de nouveaux fichiers */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900">Ajouter de Nouveaux Fichiers</h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ajouter des fichiers (PDF, Vidéos)
-              </label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.mp4,.avi,.mov,.mkv"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 mb-2">
-                    <span className="font-medium text-blue-600">Cliquez pour sélectionner</span> ou glissez-déposez
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    PDF, MP4, AVI, MOV, MKV (max 100MB par fichier)
-                  </p>
-                </label>
-              </div>
-            </div>
-
-            {/* Liste des nouveaux fichiers sélectionnés */}
-            {files.length > 0 && (
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3">Nouveaux fichiers sélectionnés</h3>
-                <div className="space-y-2">
-                  {files.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        {getFileIcon(file)}
-                        <div>
-                          <p className="font-medium text-gray-900">{file.name}</p>
-                          <p className="text-sm text-gray-500">
-                            {getFileTypeLabel(file)} • {(file.size / 1024 / 1024).toFixed(2)} MB • Index: {existingFiles.length + index}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(index)}
-                        className="p-1 hover:bg-red-100 rounded text-red-600 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        
 
         {/* Gestion des chapitres */}
         <div className="bg-white p-6 rounded-lg shadow-md">
@@ -496,8 +509,9 @@ export default function EditFormationPage() {
                     <button
                       type="button"
                       onClick={() => removeChapitre(chapitreIndex)}
-                      className="text-red-600 hover:text-red-800 text-sm font-medium"
+                      className="text-red-600 hover:text-red-800 text-sm font-medium flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-50 transition-colors"
                     >
+                      <Trash2 className="w-4 h-4" />
                       Supprimer le chapitre
                     </button>
                   </div>
@@ -597,28 +611,23 @@ export default function EditFormationPage() {
 
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Index du fichier *
+                                  {ressource.id_res ? 'Fichier actuel' : 'Fichier associé *'}
                                 </label>
-                                <select
-                                  value={ressource.fileIndex}
-                                  onChange={(e) => updateRessource(chapitreIndex, ressourceIndex, 'fileIndex', parseInt(e.target.value))}
+                                {ressource.id_res && ressource.url ? (
+                                  <div className="px-3 py-2 border rounded-md bg-gray-50 text-sm text-gray-700 break-all">
+                                    <a href={ressource.url?.startsWith('/uploads/') ? `http://localhost:3001${ressource.url}` : ressource.url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">
+                                      {ressource.nom_fichier || ressource.url}
+                                    </a>
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="file"
+                                    accept={ressource.type === 'video' ? 'video/*' : 'application/pdf'}
+                                    onChange={(e) => handleNewResourceFileChange(chapitreIndex, ressourceIndex, e.target.files?.[0] || null)}
                                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                   required
-                                >
-                                  <option value="">Sélectionner un fichier</option>
-                                  {/* Fichiers existants */}
-                                  {existingFiles.map((file, fileIndex) => (
-                                    <option key={`existing-${fileIndex}`} value={fileIndex}>
-                                      {file.name || `Fichier ${fileIndex + 1}`} ({getFileTypeLabel(file)}) - Existant
-                                    </option>
-                                  ))}
-                                  {/* Nouveaux fichiers */}
-                                  {files.map((file, fileIndex) => (
-                                    <option key={`new-${fileIndex}`} value={existingFiles.length + fileIndex}>
-                                      {file.name} ({getFileTypeLabel(file)}) - Nouveau
-                                    </option>
-                                  ))}
-                                </select>
+                                  />
+                                )}
                               </div>
                             </div>
 
@@ -627,6 +636,19 @@ export default function EditFormationPage() {
                                 <strong>Note :</strong> Cette ressource utilisera le fichier à l'index {ressource.fileIndex} 
                                 et sera traitée comme un fichier {getResourceTypeLabel(ressource.type)} par le backend.
                               </p>
+                            </div>
+
+                            {/* Lien Drive/URL (optionnel) au niveau du chapitre (appliqué à toutes ses ressources) */}
+                            <div className="mt-3">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Lien (Drive/URL) du chapitre — optionnel</label>
+                              <input
+                                type="url"
+                                value={chapitre.lien || ''}
+                                onChange={(e) => updateChapitre(chapitreIndex, 'lien', e.target.value)}
+                                placeholder="https://drive.google.com/..."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">Ce lien s'applique au chapitre (non obligatoire).</p>
                             </div>
                           </div>
                         ))}

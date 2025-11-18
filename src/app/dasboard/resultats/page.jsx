@@ -1,377 +1,165 @@
-"use client";
-import { useEffect, useState } from "react";
-import { formationService } from "@/service/formation.service";
-import { ResultatService } from "@/service/resultat.service";
+'use client';
 
-export default function ResultatsPage() {
-  const [resultats, setResultats] = useState([]);
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ResultatService } from '@/service/resultat.service';
+import axios from '@/lib/axios';
+import { getQuestionsByQcm } from '@/service/quiz.service';
+import { getReponsesByQuestion } from '@/service/reponse.service';
+
+export default function ApprenantResultatPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const qcmId = useMemo(() => Number(searchParams?.get('qcm')), [searchParams]);
+
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [formationFilter, setFormationFilter] = useState("");
-  const [formationsList, setFormationsList] = useState([]);
-  const [showAggregate, setShowAggregate] = useState(false);
-  const [sortBy, setSortBy] = useState({ key: 'id_resultat', direction: 'asc' });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [error, setError] = useState('');
+  const [qcmTitle, setQcmTitle] = useState('');
+  const [result, setResult] = useState(null); // { note, total_questions, ... }
+  const [questions, setQuestions] = useState([]); // with answers for correction
 
   useEffect(() => {
-    fetchResultats();
-    fetchFormations();
-  }, []);
+    if (!qcmId || !Number.isFinite(qcmId) || qcmId <= 0) {
+      router.replace('/dasboard/apprenant/progression');
+      return;
+    }
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        // 1) Charger la dernière tentative côté backend
+        const userData = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        if (!userData) throw new Error("Session requise");
+        const user = JSON.parse(userData);
+        if (!user?.id) throw new Error("Utilisateur invalide");
+        const res = await ResultatService.getNoteByQcm(user.id, qcmId);
+        const payload = res?.data || {};
+        setResult(payload);
 
-  const fetchResultats = async () => {
+        // 2) Charger le titre et les questions/réponses pour la correction
+        try {
+          const meta = await axios.get(`/qcm/${qcmId}`);
+          setQcmTitle(meta?.data?.titre_qcm || `QCM #${qcmId}`);
+        } catch { setQcmTitle(`QCM #${qcmId}`); }
+
+        try {
+          const list = await getQuestionsByQcm(qcmId);
+          const arr = Array.isArray(list) ? list : [];
+          const withAnswers = await Promise.all(arr.map(async (q) => {
+            try {
+              const reps = await getReponsesByQuestion(q.id_quest);
+              const repsList = Array.isArray(reps) ? reps : [];
+              return { ...q, reponses: repsList };
+            } catch { return { ...q, reponses: [] }; }
+          }));
+          setQuestions(withAnswers);
+        } catch {
+          setQuestions([]);
+        }
+      } catch (e) {
+        setError(e?.response?.data?.error || e?.message || 'Erreur de chargement du résultat');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [qcmId, router]);
+
+  const totalQuestions = useMemo(() => {
+    const fromResult = Number(result?.total_questions);
+    if (Number.isFinite(fromResult) && fromResult > 0) return fromResult;
+    return Array.isArray(questions) ? questions.length : 0;
+  }, [result, questions]);
+
+  const noteSur20 = useMemo(() => {
+    const n = Number(result?.note);
+    return Number.isFinite(n) ? n : null;
+  }, [result]);
+
+  // Charger les choix de l'apprenant depuis localStorage (si disponibles)
+  const chosenByQuestion = useMemo(() => {
     try {
-      const res = await ResultatService.getAll();
-      const raw = Array.isArray(res?.data) ? res.data : [];
-      // Normaliser les champs pour l'affichage du tableau
-      const normalized = raw.map((r) => {
-        const note = r.note ?? r.NOTE ?? 0;
-        const totalQuestions = r.total_questions ?? r.total ?? r.nb_questions ?? 0;
-        const idQcm = r.id_qcm ?? r.qcm_id ?? r.idQcm;
-        const userId = r.id_user ?? r.id ?? r.user_id;
-        const nom = r.nom ?? r.last_name ?? '';
-        const prenom = r.prenom ?? r.first_name ?? '';
-        const nomPrenom = r.nom_prenom || `${prenom} ${nom}`.trim();
-        const formationTitle = r.titre_form || r.formation || r.nom_formation || '';
-        const chapitreTitle = r.titre_qcm || r.chapitre || r.nom_chapitre || (idQcm ? `QCM #${idQcm}` : '—');
-        return {
-          ...r,
-          id_resultat: r.id_resultat ?? r.id_result ?? r.id,
-          id_qcm: idQcm,
-          total_questions: totalQuestions,
-          note: Number(note),
-          user_id: userId,
-          formation_display: formationTitle || '—',
-          chapitre_display: chapitreTitle || '—',
-          formation: formationTitle || chapitreTitle || '—',
-          nom_prenom: nomPrenom || (userId ? `Utilisateur #${userId}` : '—'),
-        };
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(`quiz:answers:${qcmId}`) : null;
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      const sel = parsed?.selected || {};
+      // Normaliser en Set pour comparaison facile
+      const map = {};
+      Object.keys(sel).forEach((k) => {
+        const arr = Array.isArray(sel[k]) ? sel[k] : [];
+        map[String(k)] = new Set(arr.map(String));
       });
-      setResultats(normalized);
-      console.log(raw);
-      
-    } catch (err) {
-      console.error("Erreur lors de la récupération :", err);
-    } finally {
-      setLoading(false);
+      return map;
+    } catch {
+      return {};
     }
-  };
-
-  const fetchFormations = async () => {
-    try {
-      const data = await formationService.getAllFormations();
-      setFormationsList(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Erreur lors de la récupération des formations:", err);
-      setFormationsList([]);
-    }
-  };
-
-  // Filtrage optionnel
-  const filteredResultats = resultats.filter((r) => {
-    const userMatch = search
-      ? r.nom_prenom?.toLowerCase().includes(search.toLowerCase())
-      : true;
-
-    const formationMatch = formationFilter
-      ? r.formation?.toLowerCase() === formationFilter.toLowerCase()
-      : true;
-
-    return userMatch && formationMatch;
-  });
-
-  // Sorting
-  const sortedResultats = [...filteredResultats].sort((a, b) => {
-    const dir = sortBy.direction === 'asc' ? 1 : -1;
-    const av = a[sortBy.key];
-    const bv = b[sortBy.key];
-    if (av == null && bv == null) return 0;
-    if (av == null) return -1 * dir;
-    if (bv == null) return 1 * dir;
-    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
-    return String(av).localeCompare(String(bv)) * dir;
-  });
-
-  // Pagination
-  const totalItems = sortedResultats.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const pagedResultats = sortedResultats.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  const changeSort = (key) => {
-    setSortBy((prev) => (
-      prev.key === key
-        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
-        : { key, direction: 'asc' }
-    ));
-  };
-
-  const exportCsv = () => {
-    const rows = sortedResultats.map((r) => ({
-      nom_prenom: r.nom_prenom,
-      formation: r.formation_display,
-      chapitre: r.chapitre_display,
-      note: r.note,
-    }));
-    const header = Object.keys(rows[0] || { nom_prenom: '', formation: '', chapitre: '', note: '' });
-    const escape = (val) => {
-      if (val == null) return '';
-      const s = String(val).replace(/"/g, '""');
-      return /[",\n]/.test(s) ? `"${s}"` : s;
-    };
-    const csv = [header.join(','), ...rows.map((row) => header.map((h) => escape(row[h])).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'resultats.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const formationOptions = formationsList?.length
-    ? formationsList.map((f) => f.titre_form)
-    : [...new Set(resultats.map((r) => r.formation_display).filter(Boolean))];
-
-  // Regrouper par utilisateur dans une formation: notes et moyenne
-  const userFormationStats = (() => {
-    const map = new Map();
-    for (const r of filteredResultats) {
-      const key = `${r.nom_prenom || ''}||${r.formation || ''}`;
-      const current = map.get(key) || {
-        nom_prenom: r.nom_prenom || '—',
-        formation: r.formation || '—',
-        notes: [],
-      };
-      const noteValue = Number(r.note);
-      current.notes.push(Number.isFinite(noteValue) ? noteValue : 0);
-      map.set(key, current);
-    }
-    return Array.from(map.values()).map((entry) => {
-      const total = entry.notes.reduce((a, b) => a + b, 0);
-      const count = entry.notes.length || 0;
-      const moyenne = count ? (total / count) : 0;
-      return {
-        ...entry,
-        count,
-        moyenne: Number.isFinite(moyenne) ? Number(moyenne.toFixed(2)) : 0,
-      };
-    });
-  })();
+  }, [qcmId]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* En-tête avec gradient */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-6 border-l-4 border-indigo-500">
-          <h1 className="text-xl font-bold text-gray-800 mb-2 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-            Liste des Résultats
-          </h1>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <p className="text-lg text-gray-600 font-medium">
-              Total des résultats : 
-              <span className="ml-2 bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-bold">
-                {totalItems}
-              </span>
-            </p>
-            <button onClick={exportCsv} className="ml-auto px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-700">Exporter CSV</button>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-5 border-b bg-gradient-to-r from-emerald-50 to-blue-50 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Résultat du quiz</h1>
+            <p className="text-sm text-gray-600">{qcmTitle}</p>
           </div>
+          <button onClick={() => router.back()} className="text-sm text-gray-600 hover:text-gray-800">Retour</button>
         </div>
 
-        {/* Barre de recherche et filtre améliorée */
-        }
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+        <div className="p-6">
+          {loading ? (
+            <div className="text-center text-gray-600">Chargement…</div>
+          ) : error ? (
+            <div className="text-center text-red-600">{error}</div>
+          ) : (
+            <div className="space-y-6">
+              <div className="rounded-lg border bg-gray-50 p-4 flex items-center justify-between">
+                <div className="text-sm text-gray-700">Votre note</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {noteSur20 != null ? `${noteSur20}/20` : '—'}
+                  {totalQuestions ? (
+                    <span className="ml-2 text-sm text-gray-600">({totalQuestions} question(s))</span>
+                  ) : null}
+                </div>
               </div>
-              <input
-                type="text"
-                placeholder="Rechercher un utilisateur..."
-                className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
 
-            <div className="flex items-center gap-3">
-              <div className="relative max-w-xs w-full lg:w-auto">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
-                </svg>
-              </div>
-              <select
-                className="block w-full pl-10 pr-8 py-3 border border-gray-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 appearance-none cursor-pointer"
-                value={formationFilter}
-                onChange={(e) => setFormationFilter(e.target.value)}
-              >
-                <option value="">Toutes les formations</option>
-                {formationOptions.map((f, idx) => (
-                  <option key={idx} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-              </div>
-              <button
-                onClick={() => setShowAggregate((v) => !v)}
-                className={`px-4 py-3 rounded-lg border text-sm font-medium transition ${showAggregate ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
-              >
-                {showAggregate ? 'Voir la liste détaillée' : 'Voir la synthèse'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Vue conditionnelle: liste détaillée OU synthèse agrégée */}
-        {showAggregate ? (
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <div className="px-6 py-4 border-b bg-gradient-to-r from-gray-50 to-gray-100">
-              <h2 className="text-sm font-semibold text-gray-700">Synthèse par utilisateur et formation</h2>
-            </div>
-            <div className="overflow-x-auto">
-              {loading ? (
-                <div className="flex items-center justify-center p-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                </div>
-              ) : userFormationStats.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">Aucune donnée agrégée à afficher.</div>
-              ) : (
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom et Prénom</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Formation</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes (toutes)</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Moyenne</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {userFormationStats.map((row, idx) => (
-                      <tr key={`${row.nom_prenom}-${row.formation}-${idx}`} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900">{row.nom_prenom}</td>
-                        <td className="px-6 py-3 whitespace-nowrap">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">{row.formation}</span>
-                        </td>
-                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700">{row.notes.join(', ')}</td>
-                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700">{row.count}</td>
-                        <td className="px-6 py-3 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${row.moyenne >= 15 ? 'bg-green-100 text-green-800' : row.moyenne >= 10 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>{row.moyenne}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            {loading ? (
-              <div className="flex items-center justify-center p-12">
-                <div className="flex flex-col items-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-                  <p className="text-gray-600 font-medium">Chargement des résultats...</p>
-                </div>
-              </div>
-            ) : filteredResultats.length === 0 ? (
-              <div className="text-center p-12">
-                <div className="mx-auto h-24 w-24 text-gray-400 mb-4">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6-4h6m2 5.291A7.962 7.962 0 0112 15c-2.34 0-4.464-.878-6.071-2.314C5.77 12.12 5.457 11.926 5.2 11.64c-1.218-1.356-2.077-2.95-2.454-4.64C2.519 5.52 3.91 4 5.5 4h13c1.59 0 2.981 1.52 2.754 3 -.377 1.69-1.236 3.284-2.454 4.64-.257.286-.57.48-.729.074C17.464 10.122 15.34 9 13 9s-4.464 1.122-6.071 2.686z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun résultat trouvé</h3>
-                <p className="text-gray-500">Essayez de modifier vos critères de recherche.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                    <tr>
-                      <th onClick={() => changeSort('nom_prenom')} className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b cursor-pointer select-none">
-                        Nom & Prénom {sortBy.key === 'nom_prenom' ? (sortBy.direction === 'asc' ? '▲' : '▼') : ''}
-                      </th>
-                      <th onClick={() => changeSort('formation_display')} className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b cursor-pointer select-none">
-                        Formation {sortBy.key === 'formation_display' ? (sortBy.direction === 'asc' ? '▲' : '▼') : ''}
-                      </th>
-                      <th onClick={() => changeSort('chapitre_display')} className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b cursor-pointer select-none">
-                        Chapitre {sortBy.key === 'chapitre_display' ? (sortBy.direction === 'asc' ? '▲' : '▼') : ''} 
-                      </th>
-                      <th onClick={() => changeSort('note')} className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b cursor-pointer select-none">
-                        Note {sortBy.key === 'note' ? (sortBy.direction === 'asc' ? '▲' : '▼') : ''}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {pagedResultats.map((r, index) => (
-                      <tr
-                        key={r.id_resultat}
-                        className={`hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 ${
-                          index % 2 === 0 ? 'bg-gray-50' : 'bg-white'
-                        }`}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-8 w-8">
-                              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center">
-                                <span className="text-sm font-medium text-white">
-                                  {r.nom_prenom?.charAt(0)?.toUpperCase() || '?'}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{r.nom_prenom}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                            {r.formation_display}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {r.chapitre_display}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${
-                              r.note >= 15 ? 'bg-green-100 text-green-800' :
-                              r.note >= 10 ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {r.note}/20
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {/* Pagination controls */}
-                <div className="flex items-center justify-between p-4">
-                  <div className="text-sm text-gray-600">Page {currentPage} / {totalPages}</div>
-                  <div className="flex items-center gap-2">
-                    <button disabled={currentPage === 1} onClick={() => setPage(1)} className={`px-3 py-1 rounded border ${currentPage === 1 ? 'text-gray-300 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}>{'<<'}</button>
-                    <button disabled={currentPage === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className={`px-3 py-1 rounded border ${currentPage === 1 ? 'text-gray-300 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}>{'<'}</button>
-                    <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="px-2 py-1 border rounded text-sm">
-                      {[5,10,20,50].map((s) => <option key={s} value={s}>{s}/page</option>)}
-                    </select>
-                    <button disabled={currentPage === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className={`px-3 py-1 rounded border ${currentPage === totalPages ? 'text-gray-300 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}>{'>'}</button>
-                    <button disabled={currentPage === totalPages} onClick={() => setPage(totalPages)} className={`px-3 py-1 rounded border ${currentPage === totalPages ? 'text-gray-300 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}>{'>>'}</button>
+              <div className="space-y-4">
+                {questions.length === 0 ? (
+                  <div className="text-sm text-gray-600">Aucune question disponible pour la correction.</div>
+                ) : questions.map((q, idx) => (
+                  <div key={q.id_quest || idx} className="border rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="font-medium text-gray-900">{idx + 1}. {q.quest}</div>
+                      <div className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">{q.point ?? 1} point(s)</div>
+                    </div>
+                    <ul className="mt-3 space-y-2">
+                      {(q.reponses || []).map((r) => {
+                        const qKey = String(q.id_quest);
+                        const isChosen = !!(chosenByQuestion[qKey]?.has && chosenByQuestion[qKey].has(String(r.id_rep)));
+                        const isCorrect = !!r.est_correcte;
+                        const baseClasses = 'text-sm flex items-center gap-2 px-2 py-1 rounded';
+                        const stateClasses = isCorrect
+                          ? 'text-emerald-800 bg-emerald-50 border border-emerald-200'
+                          : (isChosen ? 'text-red-800 bg-red-50 border border-red-200' : 'text-gray-800');
+                        return (
+                          <li key={r.id_rep} className={`${baseClasses} ${stateClasses}`}>
+                            <span className={`w-2 h-2 rounded-full ${isCorrect ? 'bg-emerald-500' : (isChosen ? 'bg-red-500' : 'bg-gray-300')}`}></span>
+                            <span>{r.texte}</span>
+                            {isCorrect ? <span className="ml-2 text-xs text-emerald-700">(bonne réponse)</span> : null}
+                            {(!isCorrect && isChosen) ? <span className="ml-2 text-xs text-red-700">(votre choix — incorrect)</span> : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
-                </div>
+                ))}
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+
+

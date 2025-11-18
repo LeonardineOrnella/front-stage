@@ -1,238 +1,173 @@
-'use client'
-import React, { useState, useEffect } from 'react'
-import axios from 'axios'
-import { User, Shield, GraduationCap, BookOpen, Mail, Trash2, Search, X } from 'lucide-react'
-import RequireRole from '@/components/backoOffice/RequireRole'
+"use client";
+import { useEffect, useState } from 'react';
+import api from '@/lib/axios';
+import { Users, Shield, GraduationCap } from 'lucide-react';
 
-const API_USERS = "http://localhost:3001/api/users"
-
-export default function Utilisateurs() {
-  const [users, setUsers] = useState([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedRole, setSelectedRole] = useState('all')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [showModal, setShowModal] = useState(false)
-  const [selectedUser, setSelectedUser] = useState(null)
-  const itemsPerPage = 5
+export default function UtilisateursPage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [users, setUsers] = useState([]);
+  const [roleFilter, setRoleFilter] = useState('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    const fetchUsers = async () => {
+    const load = async () => {
+      setLoading(true);
+      setError('');
       try {
-        const res = await axios.get(API_USERS)
-        setUsers(res.data)
-      } catch (err) {
-        console.error(err)
+        const res = await api.get('/users');
+        const list = Array.isArray(res?.data?.data) ? res.data.data : (Array.isArray(res?.data) ? res.data : []);
+        setUsers(list);
+      } catch (e) {
+        setError(e?.response?.data?.message || e?.message || 'Erreur chargement utilisateurs');
+      } finally {
+        setLoading(false);
       }
-    }
-    fetchUsers()
-  }, [])
+    };
+    load();
+  }, []);
 
-  const roleCounts = {
-    total: users.length,
-    admin: users.filter(u => u.role === 'admin').length,
-    formateur: users.filter(u => u.role === 'formateur').length,
-    apprenant: users.filter(u => u.role === 'apprenant').length,
-  }
+  const filtered = users.filter((u) => {
+    const matchesRole = !roleFilter || (u.role || '').toLowerCase() === roleFilter.toLowerCase();
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q || [u.nom, u.prenom, u.email, u.nom_user, u.prenom_user, u.email_user]
+      .filter(Boolean)
+      .some((v) => String(v).toLowerCase().includes(q));
+    return matchesRole && matchesSearch;
+  });
 
-  const filteredUsers = users.filter(u => {
-    const matchesSearch = (
-      u.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.prenom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    const matchesRole = selectedRole === 'all' ? true : u.role === selectedRole
-    return matchesSearch && matchesRole
-  })
+  const total = users.length;
+  const totalAdmins = users.filter(u => (u.role||'').toLowerCase()==='admin').length;
+  const totalFormateurs = users.filter(u => (u.role||'').toLowerCase()==='formateur').length;
+  const totalApprenants = users.filter(u => (u.role||'').toLowerCase()==='apprenant').length;
 
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [searchTerm, selectedRole])
+  const roleBadge = (role) => {
+    const r = (role||'').toLowerCase();
+    const styles = r === 'admin' ? 'bg-purple-100 text-purple-800'
+      : r === 'formateur' ? 'bg-blue-100 text-blue-800'
+      : r === 'apprenant' ? 'bg-emerald-100 text-emerald-800'
+      : 'bg-gray-100 text-gray-700';
+    const label = r ? r.charAt(0).toUpperCase() + r.slice(1) : '—';
+    return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${styles}`}>{label}</span>;
+  };
 
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage)
-  const paginatedUsers = filteredUsers.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
-
-  const getRoleIcon = (role) => {
-    switch (role) {
-      case 'admin': return <Shield className="w-5 h-5 text-red-500" />
-      case 'formateur': return <GraduationCap className="w-5 h-5 text-blue-500" />
-      case 'apprenant': return <BookOpen className="w-5 h-5 text-green-500" />
-      default: return <User className="w-5 h-5 text-gray-500" />
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!selectedUser) return
-    try {
-      await axios.delete(`${API_USERS}/${selectedUser.id}`)
-      setUsers(prev => prev.filter(u => u.id !== selectedUser.id))
-      setShowModal(false)
-      setSelectedUser(null)
-    } catch (err) {
-      console.error(err)
-    }
-  }
+  const getDisplay = (u) => {
+    const nom = u.nom || u.nom_user || '';
+    const prenom = u.prenom || u.prenom_user || '';
+    const email = u.email || u.email_user || '';
+    const full = `${prenom} ${nom}`.trim();
+    const initialsFrom = (prenom || nom || email || '').trim();
+    const initials = initialsFrom ? initialsFrom[0].toUpperCase() : '?';
+    return { nom, prenom, email, full, initials };
+  };
 
   return (
-    <RequireRole roles={['admin']}>
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200 flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">Liste des Utilisateurs</h1>
-            <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Rechercher..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
+      <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-7 border-b bg-gradient-to-r from-emerald-600 to-blue-600">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Utilisateurs</h1>
+              <p className="text-sm text-emerald-50/90">Liste des comptes (admin requis)</p>
+            </div>
+            <div className="hidden sm:flex gap-2">
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-white text-xs border border-white/20"><Users className="w-4 h-4" /> {total}</span>
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-purple-100 text-xs border border-white/20"><Shield className="w-4 h-4" /> {totalAdmins}</span>
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-blue-100 text-xs border border-white/20"><GraduationCap className="w-4 h-4" /> {totalFormateurs}</span>
+            </div>
           </div>
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded-lg border bg-white">
+              <div className="text-xs text-gray-500">Total</div>
+              <div className="text-2xl font-bold">{total}</div>
+            </div>
+            <div className="p-3 rounded-lg border bg-white">
+              <div className="text-xs text-gray-500">Admins</div>
+              <div className="text-2xl font-bold text-purple-700">{totalAdmins}</div>
+            </div>
+            <div className="p-3 rounded-lg border bg-white">
+              <div className="text-xs text-gray-500">Formateurs</div>
+              <div className="text-2xl font-bold text-blue-700">{totalFormateurs}</div>
+            </div>
+            <div className="p-3 rounded-lg border bg-white">
+              <div className="text-xs text-gray-500">Apprenants</div>
+              <div className="text-2xl font-bold text-emerald-700">{totalApprenants}</div>
+            </div>
           </div>
-
-          {/* Compteurs & Filtres par rôle */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <button
-              onClick={() => setSelectedRole('all')}
-              className={`flex items-center justify-between gap-2 border rounded-lg px-4 py-3 ${selectedRole === 'all' ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'} hover:bg-gray-100`}
-            >
-              <span className="flex items-center gap-2 text-gray-700"><User className="w-5 h-5 text-gray-500" /> Tous</span>
-              <span className="text-sm font-semibold text-gray-900">{roleCounts.total}</span>
-            </button>
-            <button
-              onClick={() => setSelectedRole('admin')}
-              className={`flex items-center justify-between gap-2 border rounded-lg px-4 py-3 ${selectedRole === 'admin' ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'} hover:bg-gray-100`}
-            >
-              <span className="flex items-center gap-2 text-gray-700"><Shield className="w-5 h-5 text-red-500" /> Admins</span>
-              <span className="text-sm font-semibold text-gray-900">{roleCounts.admin}</span>
-            </button>
-            <button
-              onClick={() => setSelectedRole('formateur')}
-              className={`flex items-center justify-between gap-2 border rounded-lg px-4 py-3 ${selectedRole === 'formateur' ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'} hover:bg-gray-100`}
-            >
-              <span className="flex items-center gap-2 text-gray-700"><GraduationCap className="w-5 h-5 text-blue-500" /> Formateurs</span>
-              <span className="text-sm font-semibold text-gray-900">{roleCounts.formateur}</span>
-            </button>
-            <button
-              onClick={() => setSelectedRole('apprenant')}
-              className={`flex items-center justify-between gap-2 border rounded-lg px-4 py-3 ${selectedRole === 'apprenant' ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'} hover:bg-gray-100`}
-            >
-              <span className="flex items-center gap-2 text-gray-700"><BookOpen className="w-5 h-5 text-green-500" /> Apprenants</span>
-              <span className="text-sm font-semibold text-gray-900">{roleCounts.apprenant}</span>
-            </button>
+          <div className="mt-4 px-6 py-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center border-t bg-white">
+            <div className="relative flex-1">
+              <input
+                value={search}
+                onChange={(e)=>setSearch(e.target.value)}
+                placeholder="Rechercher (nom, prénom, email)"
+                className="w-full border rounded-lg pl-11 pr-4 py-2"
+              />
+              <svg className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M9.5 17a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
+            </div>
+            <select value={roleFilter} onChange={(e)=>setRoleFilter(e.target.value)} className="border rounded-lg px-3 py-2">
+              <option value="">Tous les rôles</option>
+              <option value="admin">Admin</option>
+              <option value="formateur">Formateur</option>
+              <option value="apprenant">Apprenant</option>
+            </select>
           </div>
         </div>
 
+        <div className="p-6">
+          {loading ? (
+            <div className="text-center text-gray-600">
+              <div className="animate-pulse max-w-7xl mx-auto">
+                <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+                <div className="h-10 bg-gray-200 rounded mb-2"></div>
+                <div className="h-10 bg-gray-200 rounded mb-2"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="text-center text-red-600">{error}</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center text-gray-600">
+              <div className="max-w-md mx-auto p-6 bg-white rounded-xl border">
+                <div className="text-lg font-semibold mb-1">Aucun utilisateur</div>
+                <div className="text-sm">Essayez d'autres mots-clés ou changez le filtre de rôle.</div>
+              </div>
+            </div>
+          ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom & Prénom</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rôle</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-700">
+                    <th className="text-left px-4 py-2 font-medium">ID</th>
+                    <th className="text-left px-4 py-2 font-medium">Utilisateur</th>
+                    <th className="text-left px-4 py-2 font-medium">Email</th>
+                    <th className="text-left px-4 py-2 font-medium">Rôle</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedUsers.map(user => (
-                <tr key={user.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{user.prenom} {user.nom}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-700 flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-gray-400" /> {user.email}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${user.role === 'admin' ? 'bg-red-100 text-red-700' : user.role === 'formateur' ? 'bg-blue-100 text-blue-700' : user.role === 'apprenant' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                      {getRoleIcon(user.role)}
-                      {user.role || '—'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => { setSelectedUser(user); setShowModal(true) }}
-                        className="text-red-600 hover:text-red-800 p-1"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
+                <tbody>
+                  {filtered.map((u) => (
+                    <tr key={u.id} className="border-t">
+                      <td className="px-4 py-2">{u.id}</td>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-600 text-white flex items-center justify-center text-sm font-semibold">
+                            {getDisplay(u).initials}
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">{getDisplay(u).full || '—'}</div>
+                            <div className="text-xs text-gray-500">{(u.nom||u.nom_user) && (u.prenom||u.prenom_user) ? '' : 'Nom non renseigné'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2">{getDisplay(u).email || '—'}</td>
+                      <td className="px-4 py-2">{roleBadge(u.role)}</td>
                 </tr>
               ))}
-              {paginatedUsers.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="text-center py-10 text-gray-500">Aucun utilisateur trouvé</td>
-                </tr>
-              )}
             </tbody>
           </table>
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-2 py-4">
-            <button
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(prev => prev - 1)}
-              className="px-3 py-1 border rounded disabled:opacity-50"
-            >
-              Précédent
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => (
-              <button
-                key={i}
-                onClick={() => setCurrentPage(i + 1)}
-                className={`px-3 py-1 border rounded ${currentPage === i + 1 ? 'bg-blue-500 text-white' : ''}`}
-              >
-                {i + 1}
-              </button>
-            ))}
-            <button
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(prev => prev + 1)}
-              className="px-3 py-1 border rounded disabled:opacity-50"
-            >
-              Suivant
-            </button>
           </div>
         )}
       </div>
-
-      {/* Modal de confirmation */}
-      {showModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 relative">
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Confirmer la suppression</h2>
-            <p className="text-gray-600 mb-6">
-              Êtes-vous sûr de vouloir supprimer <span className="font-semibold">{selectedUser?.prenom} {selectedUser?.nom}</span> ?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
-              >
-                Supprimer
-              </button>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-    </RequireRole>
-  )
+  );
 }

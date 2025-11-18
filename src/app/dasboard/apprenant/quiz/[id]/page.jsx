@@ -130,14 +130,27 @@ export default function ApprenantQuizPage() {
       const userData = localStorage.getItem('user');
       if (userData) {
         const user = JSON.parse(userData);
+        // Sauvegarder les choix localement pour l'affichage détaillé des résultats
+        try {
+          const serialized = {};
+          Object.keys(selected || {}).forEach((qKey) => {
+            const val = selected[qKey];
+            if (val && typeof val.forEach === 'function') {
+              const arr = [];
+              val.forEach((v) => { arr.push(String(v)); });
+              serialized[qKey] = arr;
+            }
+          });
+          localStorage.setItem(`quiz:answers:${qcmId}`, JSON.stringify({ selected: serialized, at: Date.now() }));
+        } catch {}
         await axios.post('/resultat', {
           id_user: user.id,
           id_qcm: qcmId,
           note: Math.round((earnedPoints / (totalPoints || 1)) * 20),
           total_questions: questions.length,
         });
-        // Aller à la page des résultats
-        router.push('/dasboard/resultats');
+        // Aller à la page des résultats (avec correction)
+        router.push(`/dasboard/resultats?qcm=${qcmId}`);
       }
     } catch (e) {
       if (e?.response?.status === 409) {
@@ -260,6 +273,9 @@ export default function ApprenantQuizPage() {
                 )}
                 {!submitted && (
                   <button onClick={() => loadQcm(qcmId)} className="text-sm text-gray-600 hover:text-gray-800">Réinitialiser</button>
+                )}
+                {submitted && (
+                  <button onClick={() => router.push(`/dasboard/resultats?qcm=${qcmId}`)} className="text-sm text-emerald-600 hover:text-emerald-700">Voir mes résultats</button>
                 )}
               </div>
             </div>

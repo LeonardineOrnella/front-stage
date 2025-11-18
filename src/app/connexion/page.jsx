@@ -5,6 +5,7 @@ import { userService } from "@/service/user.service";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import Link from "next/link";
+ 
 
 export default function Connexion() {
   const [email, setEmail] = useState("");
@@ -41,51 +42,86 @@ export default function Connexion() {
     if (!validerFormulaire()) return;
 
     setIsLoading(true);
+    setMessage("");
+    setErreurs({});
+    
     try {
-      const res = await userService.login({ email: email, mdp: mdp });
-      if (res.data.status == 201) {
+      // Normaliser l'email avant l'envoi
+      const emailNormalise = email.trim().toLowerCase();
+      
+      const res = await userService.login({ email: emailNormalise, mdp: mdp });
+      
+      // Si la réponse contient un message d'erreur
+      if (res.data.message && res.data.message.includes("incorrect") || res.data.code === "NO_PASSWORD") {
         toast.error(res.data.message);
-      } else {
-        toast.success(res.data.message);
+        setMessage(res.data.message);
+        return;
+      }
+      
+      // Si succès et token présent
+      if (res.data.token && res.data.user) {
+        toast.success(res.data.message || "Connexion réussie");
         localStorage.setItem('token', res.data.token);
         localStorage.setItem("user", JSON.stringify(res.data.user));
         document.cookie = `token=${res.data.token}; path=/; max-age=604800; samesite=Lax`;
         router.push('/dasboard');
       }
     } catch (erreur) {
-      console.error(erreur);
-      toast.error("Une erreur s'est produite lors de la connexion");
+      console.error("Erreur de connexion:", erreur);
+      const errorMessage = erreur?.response?.data?.message || 
+                          erreur?.message || 
+                          "Une erreur s'est produite lors de la connexion";
+      toast.error(errorMessage);
+      setMessage(errorMessage);
+      
+      // Si le problème est un mot de passe non défini
+      if (erreur?.response?.data?.code === "NO_PASSWORD") {
+        setMessage("Ce compte n'a pas de mot de passe défini. Contactez un administrateur.");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-100">
-      {/* Header avec retour */}
-      <div className="absolute top-6 left-6">
-        <Link 
-          href="/"
-          className="flex items-center space-x-2 text-emerald-600 hover:text-emerald-700 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span className="font-medium">Retour à l'accueil</span>
-        </Link>
+    <div className="min-h-screen relative">
+      {/* Image de fond */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: "url('https://images.unsplash.com/photo-1522202176988-66273c2fd55f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2071&q=80')"
+        }}
+      >
+        {/* Overlay pour améliorer la lisibilité */}
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/60 via-emerald-800/50 to-emerald-900/60"></div>
       </div>
+      
+      {/* Contenu principal */}
+      <div className="relative z-10 min-h-screen">
+        {/* Header avec retour */}
+        <div className="absolute top-6 left-6">
+          <Link 
+            href="/"
+            className="flex items-center space-x-2 text-white hover:text-emerald-200 transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span className="font-medium">Accueil</span>
+          </Link>
+        </div>
 
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="w-20 h-20 bg-emerald-600 rounded-full mx-auto mb-6 flex items-center justify-center shadow-xl transform hover:scale-105 transition-all duration-300">
-              <BookOpen className="w-10 h-10 text-white" />
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="w-full max-w-md">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full mx-auto mb-6 flex items-center justify-center shadow-xl transform hover:scale-105 transition-all duration-300 border border-white/30">
+                <BookOpen className="w-10 h-10 text-white" />
+              </div>
+              <h1 className="text-4xl font-bold text-white mb-2 drop-shadow-lg">Connexion</h1>
+              <p className="text-white/90 drop-shadow-md">Accédez à votre compte</p>
             </div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">Connexion</h1>
-            <p className="text-gray-600">Accédez à votre espace personnel</p>
-          </div>
 
-          {/* Carte principale */}
-          <div className="bg-white/90 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-emerald-100">
+            {/* Carte principale */}
+            <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white/20">
             {message && (
               <div className={`mb-6 p-4 rounded-2xl flex items-center space-x-3 transition-all duration-300 ${
                 message.startsWith("") 
@@ -104,16 +140,14 @@ export default function Connexion() {
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Email */}
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-700 ml-1">
-                  Email
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 ml-1">Email</label>
                 <div className="relative group">
                   <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
                   <input
                     type="email"
-                    placeholder="exemple@email.com"
+                    placeholder="email@example.com"
                     value={email}
-                    className={`w-full pl-12 pr-4 py-4 bg-gray-50/50 border-2 rounded-2xl focus:outline-none focus:bg-white transition-all duration-300 ${
+                    className={`w-full pl-12 pr-4 py-4 bg-white border-2 rounded-2xl focus:outline-none transition-all duration-300 text-gray-900 placeholder:text-gray-400 ${
                       erreurs.email
                         ? "border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100"
                         : "border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
@@ -131,16 +165,14 @@ export default function Connexion() {
 
               {/* Mot de passe */}
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-700 ml-1">
-                  Mot de passe
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 ml-1">Mot de passe</label>
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
                   <input
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     value={mdp}
-                    className={`w-full pl-12 pr-12 py-4 bg-gray-50/50 border-2 rounded-2xl focus:outline-none focus:bg-white transition-all duration-300 ${
+                    className={`w-full pl-12 pr-12 py-4 bg-white border-2 rounded-2xl focus:outline-none transition-all duration-300 text-gray-900 placeholder:text-gray-400 ${
                       erreurs.mdp
                         ? "border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100"
                         : "border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
@@ -170,15 +202,12 @@ export default function Connexion() {
                     type="checkbox"
                     className="w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 focus:ring-2"
                   />
-                  <span className="ml-2 text-sm text-gray-600 group-hover:text-gray-800 transition-colors">
-                    Se souvenir de moi
-                  </span>
+                  <span className="ml-2 text-sm text-gray-600 group-hover:text-gray-800 transition-colors">Se souvenir de moi</span>
                 </label>
                 <button
                   type="button"
-                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium hover:underline transition-colors"
-                >
-                  Mot de passe oublié ?
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium hover:underline transition-colors">
+                  Mot de passe oublié
                 </button>
               </div>
 
@@ -193,9 +222,7 @@ export default function Connexion() {
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     <span>Connexion en cours...</span>
                   </div>
-                ) : (
-                  "Se connecter"
-                )}
+                ) : ("Se connecter")}
               </button>
             </form>
 
@@ -205,7 +232,7 @@ export default function Connexion() {
                 <div className="w-full border-t border-gray-300"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500 font-medium">ou continuer avec</span>
+                <span className="px-4 bg-white text-gray-500 font-medium">or continue with</span>
               </div>
             </div>
 
@@ -236,7 +263,7 @@ export default function Connexion() {
 
             {/* Lien inscription */}
             <p className="text-center text-gray-600 mt-8">
-              Pas encore de compte ?{" "}
+              Pas de compte ?{" "}
               <Link
                 href="/inscription"
                 className="text-emerald-600 hover:text-emerald-700 font-semibold hover:underline transition-colors"
@@ -248,5 +275,6 @@ export default function Connexion() {
         </div>
       </div>
     </div>
+  </div>
   );
 }

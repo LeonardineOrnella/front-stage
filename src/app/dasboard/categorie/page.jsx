@@ -110,9 +110,10 @@ export default function CategoriePage() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">Gestion des Catégories</h1>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  {categories.length} au total
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-gradient-to-r from-emerald-200 to-emerald-400 text-white shadow-md border border-emerald-300">
+                    {categories.length} Catégories
                 </span>
+
               </div>
               <p className="mt-1 text-sm text-gray-600">Créez, renommez et supprimez les catégories pour organiser vos contenus.</p>
             </div>

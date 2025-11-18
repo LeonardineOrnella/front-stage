@@ -2,11 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Eye, Search, Filter, BookOpen, FileText, Video, Image, Calendar, Clock, DollarSign, ChevronDown, ChevronRight, FolderOpen, File, Play, Download, ExternalLink } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Search, Filter, BookOpen, FileText, Calendar, Clock, DollarSign, ChevronDown, ChevronRight, FolderOpen, File, Play, Download, ExternalLink } from 'lucide-react';
 import { formationService } from '../../../service/formation.service';
+import { chapService } from '../../../service/chap.service';
 import { categorieService } from '../../../service/categorie.service';
+import ConfirmModal from '../../../components/backoOffice/ConfirmModal';
+import { useUser } from '@/components/backoOffice/student/UserContext';
+ 
 
 export default function FormationPage() {
+  const { user } = useUser();
   const [formations, setFormations] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +24,7 @@ export default function FormationPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const router = useRouter();
+  const [confirmState, setConfirmState] = useState({ open: false, title: '', message: '', onConfirm: null });
   
 
   useEffect(() => {
@@ -66,15 +72,22 @@ export default function FormationPage() {
     router.push(`/dasboard/formation/edit/${formation.id_form}`);
   };
 
-  const handleDelete = async (formation) => {
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer la formation "${formation.titre_form}" ?`)) {
+  const handleDelete = (formation) => {
+    setConfirmState({
+      open: true,
+      title: 'Supprimer la formation',
+      message: `Êtes-vous sûr de vouloir supprimer la formation "${formation.titre_form}" ?`,
+      onConfirm: async () => {
       try {
         await formationService.deleteFormation(formation.id_form);
+          setConfirmState((s) => ({ ...s, open: false }));
         fetchData();
       } catch (error) {
         console.error('Erreur lors de la suppression:', error);
+          setConfirmState((s) => ({ ...s, open: false }));
       }
     }
+    });
   };
 
   const toggleFormationExpansion = (formationId) => {
@@ -95,6 +108,24 @@ export default function FormationPage() {
       newExpanded.add(chapterId);
     }
     setExpandedChapters(newExpanded);
+  };
+
+  const handleDeleteChapter = (chapitre) => {
+    setConfirmState({
+      open: true,
+      title: 'Supprimer le chapitre',
+      message: `Êtes-vous sûr de vouloir supprimer le chapitre "${chapitre.titre_chap}" ?`,
+      onConfirm: async () => {
+        try {
+          await chapService.remove(chapitre.id_chap);
+          setConfirmState((s) => ({ ...s, open: false }));
+          await fetchData();
+        } catch (error) {
+          console.error('Erreur lors de la suppression du chapitre:', error);
+          setConfirmState((s) => ({ ...s, open: false }));
+        }
+      }
+    });
   };
 
   const getStatusColor = (status) => {
@@ -196,16 +227,18 @@ export default function FormationPage() {
         <div className="mb-8">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestion des Formations</h1>
-              <p className="text-gray-600">Gérez vos formations, chapitres et ressources</p>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Mes formations</h1>
+              <p className="text-gray-600">Gérez et suivez vos formations</p>
             </div>
+            {user?.role === 'formateur' && (
             <button
               onClick={() => router.push('/dasboard/formation/create')}
               className="btn-primary flex items-center gap-2 mt-4 lg:mt-0"
             >
               <Plus className="w-5 h-5" />
-              Nouvelle Formation
+              Nouvelle formation
             </button>
+            )}
           </div>
 
           {/* Cartes de statistiques */}
@@ -279,7 +312,7 @@ export default function FormationPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
                   type="text"
-                  placeholder="Rechercher une formation..."
+                  placeholder={'Rechercher...'}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -316,19 +349,19 @@ export default function FormationPage() {
           {currentFormations.length === 0 ? (
             <div className="bg-white p-8 rounded-lg shadow-sm border border-gray-200 text-center">
               <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune formation trouvée</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune formation</h3>
               <p className="text-gray-600 mb-4">
                 {searchTerm || selectedCategory || selectedStatus 
-                  ? 'Aucune formation ne correspond à vos critères de recherche.'
-                  : 'Commencez par créer votre première formation.'
+                  ? 'Aucune formation ne correspond'
+                  : 'Créez votre première formation'
                 }
               </p>
-              {!searchTerm && !selectedCategory && !selectedStatus && (
+              {!searchTerm && !selectedCategory && !selectedStatus && user?.role === 'formateur' && (
                 <button
                   onClick={() => router.push('/dasboard/formation/create')}
                   className="btn-primary"
                 >
-                  Créer une formation
+                  Créer
                 </button>
               )}
             </div>
@@ -378,12 +411,12 @@ export default function FormationPage() {
                           </h3>
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(formation.statut_form)}`}>
                             {getStatusIcon(formation.statut_form)}
-                            <span className="ml-1">{formation.statut_form}</span>
+                          <span className="ml-1">{formation.statut_form}</span>
                           </span>
                         </div>
                         
                         <p className="text-gray-600 mb-3 line-clamp-2">
-                          {formation.description || 'Aucune description disponible'}
+                          {formation.description || 'Pas de description'}
                         </p>
                         
                         {/* Métadonnées de la formation */}
@@ -418,15 +451,15 @@ export default function FormationPage() {
                     
                     {/* Actions et statistiques */}
                     <div className="flex flex-col items-end space-y-3">
-                      <div className="text-right">
+                        <div className="text-right">
                         <div className="text-2xl font-bold text-gray-900">{formation.totalChapitres}</div>
-                        <div className="text-sm text-gray-500">chapitres</div>
+                          <div className="text-sm text-gray-500">chapitres</div>
                       </div>
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => toggleFormationExpansion(formation.id_form)}
                           className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Développer/Réduire"
+                            title={'Déplier'}
                         >
                           {expandedFormations.has(formation.id_form) ? (
                             <ChevronDown className="w-5 h-5" />
@@ -434,20 +467,31 @@ export default function FormationPage() {
                             <ChevronRight className="w-5 h-5" />
                           )}
                         </button>
-                        <button
-                          onClick={() => handleEdit(formation)}
-                          className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Modifier"
-                        >
-                          <Edit className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(formation)}
-                          className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Supprimer"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                        {user?.role === 'formateur' && (
+                          <>
+                          <button
+                            onClick={() => router.push(`/dasboard/formateur/ressources?formationId=${formation.id_form}`)}
+                            className="p-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                            title={'Gérer les ressources'}
+                          >
+                            <FolderOpen className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(formation)}
+                            className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                            title={'Modifier'}
+                          >
+                            <Edit className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(formation)}
+                            className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                            title={'Supprimer'}
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -459,7 +503,7 @@ export default function FormationPage() {
                     {/* Résumé des ressources */}
                     <div className="px-6 py-4 bg-gray-50">
                       <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-gray-900">Résumé des ressources</h4>
+                        <h4 className="font-medium text-gray-900">Récapitulatif des ressources</h4>
                         <div className="flex items-center space-x-4 text-sm text-gray-600">
                           <div className="flex items-center space-x-1">
                             <FileText className="w-4 h-4 text-red-500" />
@@ -467,11 +511,11 @@ export default function FormationPage() {
                           </div>
                           <div className="flex items-center space-x-1">
                             <Play className="w-4 h-4 text-blue-500" />
-                            <span>{formation.totalVideos} Vidéos</span>
+                            <span>{formation.totalVideos} vidéos</span>
                           </div>
                           <div className="flex items-center space-x-1">
                             <File className="w-4 h-4 text-gray-500" />
-                            <span>{formation.totalRessources} Total</span>
+                            <span>{formation.totalRessources} ressources</span>
                           </div>
                         </div>
                       </div>
@@ -506,6 +550,15 @@ export default function FormationPage() {
                                     <span>{chapitre.duree}</span>
                                     <span className="text-gray-400">|</span>
                                     <span>{chapitre.type}</span>
+                                    {user?.role === 'formateur' && (
+                                      <button
+                                        onClick={() => handleDeleteChapter(chapitre)}
+                                        className="ml-3 p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                        title="Supprimer le chapitre"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -530,7 +583,7 @@ export default function FormationPage() {
                                         <div className="flex items-center space-x-2">
                                           {ressource.url.startsWith('/uploads/') ? (
                                             <a
-                                              href={ressource.url}
+                                              href={`http://localhost:3001${ressource.url}`}
                                               download
                                               className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
                                               title="Télécharger"
@@ -558,7 +611,7 @@ export default function FormationPage() {
                               {/* Message si pas de ressources */}
                               {expandedChapters.has(chapitre.id_chap) && (!chapitre.ressources || chapitre.ressources.length === 0) && (
                                 <div className="px-4 py-3 text-center text-gray-500 text-sm">
-                                  Aucune ressource pour ce chapitre
+                                  Pas de ressources dans ce chapitre
                                 </div>
                               )}
                             </div>
@@ -567,8 +620,8 @@ export default function FormationPage() {
                       ) : (
                         <div className="text-center py-8 text-gray-500">
                           <BookOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                          <p>Aucun chapitre pour cette formation</p>
-                          <p className="text-sm">Ajoutez des chapitres pour organiser votre contenu</p>
+                          <p>Aucun chapitre</p>
+                          <p className="text-sm">Ajoutez des chapitres pour commencer</p>
                         </div>
                       )}
                     </div>
@@ -583,11 +636,7 @@ export default function FormationPage() {
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-700">
-                  Affichage de <span className="font-medium">{startIndex + 1}</span> à{' '}
-                  <span className="font-medium">
-                    {Math.min(endIndex, filteredFormations.length)}
-                  </span>{' '}
-                  sur <span className="font-medium">{filteredFormations.length}</span> formations
+                  {`${startIndex + 1}–${Math.min(endIndex, filteredFormations.length)} sur ${filteredFormations.length}`}
                 </div>
                 
                 <div className="flex items-center space-x-2">
@@ -679,6 +728,13 @@ export default function FormationPage() {
           </div>
         </div>
       )}
+      <ConfirmModal
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+      />
     </div>
   );
 }

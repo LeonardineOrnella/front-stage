@@ -1,40 +1,93 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { formationService } from "@/service/formation.service";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import { toast } from "react-toastify";
-import { userService } from "@/service/user.service";
-import { CreditCard, Banknote, Smartphone } from "lucide-react";
+import { formationService } from "@/service/formation.service";
+import { transactionService } from "@/service/transaction.service";
+import { paymentService } from "@/service/payment.service";
 
-export default function Page() {
+const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "";
+const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
+
+const formatAriary = (val) => {
+  const num = Number(val || 0);
+  return `${num.toLocaleString('fr-MG')} Ar`;
+};
+
+const formatCurrency = (amount, currency) => {
+  try {
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency.toUpperCase()}`;
+  }
+};
+
+function StripeCheckoutForm({ formationId, onSuccess }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!stripe || !elements) return;
+
+    setLoading(true);
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/paiement/success?formation=${formationId}`,
+      },
+      redirect: "if_required",
+    });
+
+    if (error) {
+      toast.error(error.message || "Le paiement a échoué.");
+    } else if (paymentIntent && paymentIntent.status === "succeeded") {
+      toast.success("Paiement confirmé !");
+      onSuccess();
+    }
+
+    setLoading(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <PaymentElement />
+      <button
+        type="submit"
+        disabled={!stripe || loading}
+        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {loading ? "Traitement en cours…" : "Confirmer le paiement"}
+      </button>
+    </form>
+  );
+}
+
+export default function CheckoutPage() {
   const params = useParams();
   const router = useRouter();
   const { id } = params || {};
+
   const [formation, setFormation] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState("card"); // card | bank | mobile
-  const [card, setCard] = useState({ number: "", name: "", expiry: "", cvc: "" });
-  const [bank, setBank] = useState({ holder: "", bankName: "", account: "", ribKey: "" });
-  const [mobile, setMobile] = useState({ operator: "", phone: "" });
-
-  const formatAriary = (val) => {
-    const num = Number(val || 0);
-    return `${num.toLocaleString('fr-MG')} Ar`;
-  };
+  const [clientSecret, setClientSecret] = useState(null);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [currency, setCurrency] = useState("eur");
+  const [initializingPayment, setInitializingPayment] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       if (!id) return;
       try {
-        // Fallback immédiat depuis sessionStorage pour affichage statique
-        if (typeof window !== 'undefined' && !formation) {
-          const cached = sessionStorage.getItem('checkoutFormation');
+        if (typeof window !== "undefined") {
+          const cached = sessionStorage.getItem("checkoutFormation");
           if (cached) {
             try {
               const parsed = JSON.parse(cached);
-              // eslint-disable-next-line no-console
-              console.log('Checkout cached formation:', parsed);
               setFormation({
                 id_form: parsed.id_form,
                 titre_form: parsed.titre_form,
@@ -47,111 +100,116 @@ export default function Page() {
             } catch {}
           }
         }
-        const numericId = Number(id);
-        // eslint-disable-next-line no-console
-        console.log('Checkout load id:', numericId);
-        const data = await formationService.getFormationById(numericId);
-        const pick = (val) => Array.isArray(val) ? val[0] : val;
+
+        const config = await paymentService.getConfig().catch(() => null);
+        if (config?.currency) setCurrency(config.currency);
+
+        const data = await formationService.getFormationById(Number(id));
+        const pick = (val) => (Array.isArray(val) ? val[0] : val);
         const src = pick(data?.formation || data?.data || data);
-        const normalized = src ? {
+        const normalized = src
+          ? {
           id_form: src.id_form ?? src.id ?? src.formation_id ?? src.ID,
           titre_form: src.titre_form ?? src.titre ?? src.title ?? "",
           description: src.description ?? src.resume ?? src.apercu ?? "",
-          frais_form: src.frais_form ?? src.prix ?? src.price ?? 0,
+              frais_form: Number(src.frais_form ?? src.prix ?? src.price ?? 0),
           duree_form: src.duree_form ?? src.duree ?? src.duration ?? null,
           image_couverture: src.image_couverture ?? src.cover ?? src.image ?? null,
           chapitres: src.chapitres ?? src.mchapitres ?? src.chapters ?? [],
-        } : null;
-        if (normalized) {
-          setFormation(normalized);
-          // Vérifier si déjà inscrit et rediriger directement
+            }
+          : null;
+
+        if (!normalized) {
+          toast.error("Formation introuvable");
+          router.replace("/dasboard/apprenant/catalogue");
+          return;
+        }
+
+        const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+        if (userStr) {
           try {
-            const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-            if (userStr) {
               const user = JSON.parse(userStr);
-              const res = await userService.getMesCours(user.id);
-              const courses = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-              const exists = courses.some((c) => Number(c.id_form ?? c.id) === Number(normalized.id_form));
-              if (exists) {
+            const already = await transactionService.checkFormationAccess(normalized.id_form, user.id);
+            if (already) {
                 router.replace(`/dasboard/apprenant/formation/${normalized.id_form}`);
                 return;
-              }
             }
           } catch {}
         }
-      } catch (e) {
-        // Fallback: charger toutes les formations et chercher par id
-        try {
-          const all = await formationService.getAllFormations();
-          const numericId = Number(id);
-          const found = Array.isArray(all) ? all.find(f => Number(f.id_form ?? f.id) === numericId) : null;
-          if (found) {
-            setFormation({
-              id_form: found.id_form ?? found.id,
-              titre_form: found.titre_form ?? found.titre ?? "",
-              description: found.description ?? "",
-              frais_form: found.frais_form ?? found.prix ?? 0,
-              duree_form: found.duree_form ?? found.duree ?? null,
-              image_couverture: found.image_couverture ?? found.cover ?? null,
-              chapitres: found.chapitres ?? found.mchapitres ?? [],
-            });
-          } else {
-            toast.error("Formation introuvable");
-          }
-        } catch {
-          toast.error("Formation introuvable");
-        }
+
+        setFormation(normalized);
+      } catch (error) {
+        console.error("Erreur chargement formation:", error);
+        toast.error("Impossible de charger la formation.");
       } finally {
         setLoading(false);
       }
     };
-    load();
-  }, [id]);
 
-  const handlePayerEtInscrire = async () => {
-    try {
+    load();
+  }, [id, router]);
+
+  const totalEuros = useMemo(() => {
+    if (!formation) return 0;
+    return Number(formation.frais_form || 0) / 4500;
+  }, [formation]);
+
+  const initializePayment = async () => {
+    if (!formation) return;
+    if (!stripePromise) {
+      toast.error("Stripe n'est pas configuré côté client.");
+      return;
+    }
+
       const userStr = localStorage.getItem("user");
       if (!userStr) {
-        toast.error("Veuillez vous connecter");
-        router.push("/connexion");
+      toast.error("Veuillez vous connecter pour continuer.");
+      router.push("/connexion");
         return;
       }
+
+    try {
       const user = JSON.parse(userStr);
-      // Validation minimale selon la méthode
-      if (paymentMethod === 'card') {
-        if (!card.number || !card.name || !card.expiry || !card.cvc) {
-          toast.error("Veuillez renseigner les informations de carte");
+      const already = await transactionService.checkFormationAccess(formation.id_form, user.id);
+        if (already) {
+        toast.info("Vous avez déjà accès à cette formation.");
+        router.push(`/dasboard/apprenant/formation/${formation.id_form}`);
           return;
         }
-      } else if (paymentMethod === 'bank') {
-        if (!bank.holder || !bank.bankName || !bank.account || !bank.ribKey) {
-          toast.error("Veuillez renseigner les informations bancaires (Titulaire, Banque, Compte, Clé RIB)");
-          return;
-        }
-      } else if (paymentMethod === 'mobile') {
-        if (!mobile.operator || !mobile.phone) {
-          toast.error("Veuillez renseigner les informations mobile money");
-          return;
-        }
+
+      setInitializingPayment(true);
+      const response = await paymentService.createPaymentIntent(formation.id_form);
+      if (!response?.success || !response?.clientSecret) {
+        throw new Error(response?.message || "Erreur de création du paiement");
       }
 
-      toast.success("Paiement accepté. Inscription en cours...");
-       await userService.inscrireFormation({ 
-         userId: user.id, 
-         formationId: id,
-         payment: {
-           method: paymentMethod,
-           card: paymentMethod==='card' ? card : undefined,
-           bank: paymentMethod==='bank' ? bank : undefined,
-           mobile: paymentMethod==='mobile' ? mobile : undefined,
-           currency: 'MGA'
-         }
-       });
-      toast.success("Inscription enregistrée");
-      router.push(`/dasboard/apprenant/formation/${id}`);
-    } catch (e) {
-      toast.error("Échec du paiement/inscription");
+      setClientSecret(response.clientSecret);
+      setShowPaymentForm(true);
+    } catch (error) {
+      console.error("Erreur init paiement:", error);
+      toast.error(error?.response?.data?.message || error?.message || "Impossible de préparer le paiement.");
+    } finally {
+      setInitializingPayment(false);
     }
+  };
+
+  const handlePaymentSuccess = async () => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        const unlocked = await transactionService.checkFormationAccessRobust(formation.id_form, user.id);
+        if (unlocked) {
+          router.push(`/dasboard/apprenant/formation/${formation.id_form}`);
+          return;
+        }
+      } catch (error) {
+        console.error("Erreur vérification accès formation:", error);
+      }
+    }
+
+    toast.info("Paiement reçu. Votre accès sera disponible sous peu.");
+    router.push("/dasboard/apprenant/transactions");
   };
 
   if (loading) {
@@ -168,139 +226,73 @@ export default function Page() {
     );
   }
 
+  if (!formation) {
+    return null;
+  }
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-2">Confirmer l'inscription</h1>
-      <p className="text-sm text-gray-500 mb-6">Vérifiez les détails avant le paiement.</p>
-
-      {!formation && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4 mb-4 text-sm">
-          Impossible d'afficher la formation. Essayez de revenir au catalogue et de cliquer à nouveau sur "S'inscrire".
-        </div>
-      )}
+      <p className="text-sm text-gray-500 mb-6">Vérifiez les détails avant de procéder au paiement sécurisé.</p>
 
       <div className="bg-white border rounded-xl p-6 space-y-6">
         <div>
           {formation?.image_couverture && (
-            <img src={`http://localhost:3001${formation.image_couverture}`} alt={formation.titre_form} className="w-full h-40 object-cover rounded-lg mb-4" />
+            <img
+              src={`http://localhost:3001${formation.image_couverture}`}
+              alt={formation.titre_form}
+              className="w-full h-40 object-cover rounded-lg mb-4"
+            />
           )}
-          <h2 className="text-xl font-semibold">{formation?.titre_form || `Formation #${id}`}</h2>
-          <p className="text-gray-600">{formation?.description || "Aperçu indisponible pour le moment."}</p>
-          <div className="mt-3 text-sm text-gray-500">Durée estimée: {formation?.duree_form ?? '—'}h</div>
+          <h2 className="text-xl font-semibold">{formation.titre_form}</h2>
+          <p className="text-gray-600">{formation.description || "Aperçu indisponible pour le moment."}</p>
+          <div className="mt-3 text-sm text-gray-500">Durée estimée : {formation?.duree_form ?? "—"}h</div>
         </div>
+
         <div className="flex items-center justify-between">
           <span className="text-gray-700">Montant</span>
           <div className="text-right">
             <div className="text-xl font-bold text-emerald-600">{formatAriary(formation?.frais_form)}</div>
-            <div className="text-xs text-gray-500">~ {(parseFloat(formation?.frais_form || 0) / 4500).toFixed(2)} € (indicatif)</div>
+            <div className="text-xs text-gray-500">≈ {formatCurrency(totalEuros, currency)}</div>
           </div>
         </div>
+
         {Array.isArray(formation?.chapitres) && formation.chapitres.length > 0 && (
           <div className="text-sm text-gray-600">
-            <div className="font-medium mb-1">Chapitres inclus:</div>
+            <div className="font-medium mb-1">Chapitres inclus :</div>
             <ul className="list-disc ml-5 space-y-1">
-              {formation.chapitres.slice(0,3).map((c, i) => (
-                <li key={i}>{c.titre_chap || c.titre || c.title || `Chapitre ${i+1}`}</li>
+              {formation.chapitres.slice(0, 3).map((c, i) => (
+                <li key={i}>{c.titre_chap || c.titre || c.title || `Chapitre ${i + 1}`}</li>
               ))}
             </ul>
           </div>
         )}
 
-        {/* Méthode de paiement */}
-        <div>
-          <div className="font-semibold mb-3">Méthode de paiement</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {!showPaymentForm && (
             <button
               type="button"
-              onClick={() => setPaymentMethod('card')}
-              className={`p-4 border rounded-lg text-left flex items-center gap-3 ${paymentMethod==='card' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}
-            >
-              <CreditCard className="w-5 h-5 text-emerald-600" />
-              <span>Carte bancaire</span>
+            onClick={initializePayment}
+            disabled={initializingPayment}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {initializingPayment ? "Préparation du paiement…" : "Procéder au paiement"}
             </button>
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('bank')}
-              className={`p-4 border rounded-lg text-left flex items-center gap-3 ${paymentMethod==='bank' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}
-            >
-              <Banknote className="w-5 h-5 text-emerald-600" />
-              <span>Virement bancaire</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('mobile')}
-              className={`p-4 border rounded-lg text-left flex items-center gap-3 ${paymentMethod==='mobile' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}
-            >
-              <Smartphone className="w-5 h-5 text-emerald-600" />
-              <span>Mobile money</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Formulaires conditionnels */}
-        {paymentMethod === 'card' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600">Numéro de carte</label>
-              <input value={card.number} onChange={(e)=>setCard({...card, number:e.target.value})} placeholder="4111 1111 1111 1111" className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">Nom sur la carte</label>
-              <input value={card.name} onChange={(e)=>setCard({...card, name:e.target.value})} placeholder="NOM PRÉNOM" className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">Expiration</label>
-              <input value={card.expiry} onChange={(e)=>setCard({...card, expiry:e.target.value})} placeholder="MM/AA" className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">CVC</label>
-              <input value={card.cvc} onChange={(e)=>setCard({...card, cvc:e.target.value})} placeholder="123" className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-            </div>
-          </div>
         )}
 
-        {paymentMethod === 'bank' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600">Titulaire du compte</label>
-              <input value={bank.holder} onChange={(e)=>setBank({...bank, holder:e.target.value})} placeholder="Nom du titulaire" className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">Banque</label>
-              <input value={bank.bankName} onChange={(e)=>setBank({...bank, bankName:e.target.value})} placeholder="BOA / BNI / Accès / ..." className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">Numéro de compte</label>
-              <input value={bank.account} onChange={(e)=>setBank({...bank, account:e.target.value})} placeholder="XXXXXXXXXXXX" className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">Clé RIB</label>
-              <input value={bank.ribKey} onChange={(e)=>setBank({...bank, ribKey:e.target.value})} placeholder="XX" className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-            </div>
-          </div>
+        {showPaymentForm && clientSecret && stripePromise && (
+          <Elements
+            stripe={stripePromise}
+            options={{ clientSecret, appearance: { theme: "stripe" } }}
+          >
+            <StripeCheckoutForm formationId={formation.id_form} onSuccess={handlePaymentSuccess} />
+          </Elements>
         )}
 
-        {paymentMethod === 'mobile' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600">Opérateur</label>
-              <select value={mobile.operator} onChange={(e)=>setMobile({...mobile, operator:e.target.value})} className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white">
-                <option value="">Sélectionner</option>
-                <option value="orange">Orange Money (MG)</option>
-                <option value="airtel">Airtel Money (MG)</option>
-                <option value="telma">Mvola (Telma)</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">Numéro de téléphone</label>
-              <input value={mobile.phone} onChange={(e)=>setMobile({...mobile, phone:e.target.value})} placeholder="Ex: 032 / 033 / 034 ..." className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-            </div>
+        {!stripePromise && (
+          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+            La clé publique Stripe n'est pas configurée. Ajoutez NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY dans votre environnement.
           </div>
         )}
-
-        <button onClick={handlePayerEtInscrire} disabled={!formation} className={`w-full text-white rounded-lg py-3 ${formation ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-400 cursor-not-allowed'}`}>
-          Payer et s'inscrire
-        </button>
       </div>
     </div>
   );

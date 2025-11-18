@@ -1,23 +1,28 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Clock, Users, Star, BookOpen, Play, FileText, Eye, Image as ImageIcon } from 'lucide-react';
 import { formationService } from '@/service/formation.service';
 import { categorieService } from '@/service/categorie.service';
 import FormationDetail from './FormationDetail';
+import { transactionService } from '@/service/transaction.service';
+ 
 
 export default function CardFormation() {
+  const router = useRouter();
   const [formations, setFormations] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(6);
   const [selectedFormation, setSelectedFormation] = useState(null);
+  const [showAllFormations, setShowAllFormations] = useState(false);
+  const [formationsInscrites, setFormationsInscrites] = useState(new Set());
 
   useEffect(() => {
     fetchFormations();
     fetchCategories();
+    fetchFormationsInscrites();
   }, []);
 
   const fetchFormations = async () => {
@@ -44,6 +49,28 @@ export default function CardFormation() {
     }
   };
 
+  const fetchFormationsInscrites = async () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      if (!token) {
+        setFormationsInscrites(new Set());
+        return;
+      }
+      const transactionsResponse = await transactionService.getMyTransactions();
+      const transactions = transactionsResponse.data?.data || [];
+      const formationsInscritesIds = new Set(
+        transactions
+          .filter(t => String(t.statut_trans || '').toLowerCase() === 'validee')
+          .map(t => Number(t.id_form))
+          .filter(Boolean)
+      );
+      setFormationsInscrites(formationsInscritesIds);
+    } catch (error) {
+      console.error('Erreur lors du chargement des formations inscrites:', error);
+      setFormationsInscrites(new Set());
+    }
+  };
+
   // Enrichir les formations avec les informations de catégorie et les comptes
   const enrichedFormations = formations.map(formation => {
     const category = categories.find(cat => cat.id_categ === formation.id_categ);
@@ -65,19 +92,19 @@ export default function CardFormation() {
     };
   });
 
-  // Filtrer les formations
-  const filteredFormations = enrichedFormations.filter(formation => {
-    const matchesSearch = formation.titre_form.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         formation.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || formation.categorie === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Filtrer les formations : afficher uniquement celles où l'utilisateur est inscrit (si connecté)
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const filteredFormations = token 
+    ? enrichedFormations.filter(formation => 
+        formationsInscrites.has(Number(formation.id_form))
+      )
+    : []; // Si non connecté, ne rien afficher dans cette section
 
   // Pagination
-  const totalPages = Math.ceil(filteredFormations.length / itemsPerPage);
+  const totalPages = showAllFormations ? 1 : Math.ceil(filteredFormations.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentFormations = filteredFormations.slice(startIndex, endIndex);
+  const currentFormations = showAllFormations ? filteredFormations : filteredFormations.slice(startIndex, endIndex);
 
   // Catégories uniques pour le filtre
   const uniqueCategories = ['all', ...Array.from(new Set(enrichedFormations.map(f => f.categorie)))];
@@ -107,6 +134,19 @@ export default function CardFormation() {
     return null;
   };
 
+  const handleInscriptionClick = async (formation) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) { router.push('/inscription'); return; }
+    try {
+      const hasAccess = await transactionService.checkFormationAccess(formation.id_form);
+      if (hasAccess) {
+        router.push(`/dasboard/apprenant/formation/${formation.id_form}/contenu`);
+        return;
+      }
+    } catch {}
+    router.push(`/dasboard/apprenant/checkout/${formation.id_form}`);
+  };
+
   const handleViewDetails = (formation) => {
     setSelectedFormation(formation);
   };
@@ -134,44 +174,54 @@ export default function CardFormation() {
         <div className="max-w-7xl mx-auto px-6">
           {/* Header Section */}
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">
-              Découvrez nos formations
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              {token ? 'Mes formations' : 'Nos formations'}
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Des formations de qualité pour développer vos compétences et 
-              accélérer votre carrière professionnelle
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              {token 
+                ? 'Retrouvez toutes vos formations inscrites et continuez votre apprentissage.'
+                : 'Explorez une sélection de parcours conçus avec nos experts pour renforcer vos compétences techniques et accélérer votre carrière.'
+              }
             </p>
-          </div>
-
-          {/* Filtres et recherche */}
-          <div className="flex flex-col md:flex-row gap-4 mb-12 justify-between items-center">
-            <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-              <input
-                type="text"
-                placeholder="Rechercher une formation..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-colors min-w-[300px]"
-              />
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-colors"
-              >
-                {uniqueCategories.map(category => (
-                  <option key={category} value={category}>
-                    {category === 'all' ? 'Toutes les catégories' : category}
-                  </option>
-                ))}
-              </select>
+            {token && !showAllFormations && filteredFormations.length > itemsPerPage && (
+              <div className="mt-8 flex justify-center">
+                <button
+                  onClick={() => {
+                    setShowAllFormations(true);
+                    setCurrentPage(1);
+                  }}
+                  className="px-6 py-3 bg-emerald-600 text-white font-semibold rounded-full shadow-lg hover:bg-emerald-700 transition-colors"
+                >
+                  Voir toutes mes formations
+                </button>
             </div>
-            
-            <div className="text-gray-600">
-              {filteredFormations.length} formation{filteredFormations.length > 1 ? 's' : ''} trouvée{filteredFormations.length > 1 ? 's' : ''}
-            </div>
+            )}
           </div>
 
           {/* Grille des formations */}
+          {filteredFormations.length === 0 && token ? (
+            <div className="text-center py-12 mb-12">
+              <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune formation inscrite</h3>
+              <p className="text-gray-600 mb-4">Vous n'êtes inscrit à aucune formation pour le moment.</p>
+              <a 
+                href="/dasboard/apprenant/catalogue" 
+                className="inline-block px-6 py-3 bg-emerald-600 text-white font-semibold rounded-full shadow-lg hover:bg-emerald-700 transition-colors"
+              >
+                Parcourir le catalogue
+              </a>
+            </div>
+          ) : !token ? (
+            <div className="text-center py-12 mb-12">
+              <p className="text-gray-600 mb-4">Connectez-vous pour voir vos formations inscrites.</p>
+              <a 
+                href="/connexion" 
+                className="inline-block px-6 py-3 bg-emerald-600 text-white font-semibold rounded-full shadow-lg hover:bg-emerald-700 transition-colors"
+              >
+                Se connecter
+              </a>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
             {currentFormations.map((formation) => {
               const imageUrl = getImageUrl(formation);
@@ -246,13 +296,25 @@ export default function CardFormation() {
                         <button 
                           onClick={() => handleViewDetails(formation)}
                           className="p-2 text-gray-400 hover:text-emerald-600 transition-colors" 
-                          title="Voir détails"
+                          title={'Voir les détails'}
                         >
                           <Eye className="w-5 h-5" />
                         </button>
-                        <button className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-300 transform hover:scale-105">
-                          S'inscrire
-                        </button>
+                        {formationsInscrites.has(Number(formation.id_form)) ? (
+                          <button 
+                            onClick={() => router.push(`/dasboard/apprenant/formation/${formation.id_form}`)}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-300 transform hover:scale-105"
+                          >
+                            Accéder
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => handleInscriptionClick(formation)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-300 transform hover:scale-105"
+                          >
+                            S'inscrire
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -260,9 +322,10 @@ export default function CardFormation() {
               );
             })}
           </div>
+          )}
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {filteredFormations.length > 0 && !showAllFormations && totalPages > 1 && (
             <div className="flex justify-center items-center gap-2">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
@@ -299,14 +362,10 @@ export default function CardFormation() {
           {/* Call-to-action */}
           <div className="text-center mt-16">
             <div className="bg-emerald-600 rounded-2xl p-12 text-white">
-              <h3 className="text-3xl font-bold mb-4">
-                Prêt à commencer votre formation ?
-              </h3>
-              <p className="text-xl mb-8 opacity-90">
-                Rejoignez des milliers d'apprenants qui ont déjà transformé leur carrière
-              </p>
+              <h3 className="text-3xl font-bold mb-4">Commencez dès aujourd'hui</h3>
+              <p className="text-xl mb-8 opacity-90">Accédez à des contenus de qualité</p>
               <button className="px-8 py-4 bg-white text-emerald-600 font-semibold rounded-full text-lg hover:bg-gray-100 transition-all duration-300 transform hover:scale-105 shadow-lg">
-                Commencer maintenant
+                Explorer les formations
               </button>
             </div>
           </div>

@@ -1,304 +1,327 @@
-'use client' 
-import React, { useState, useEffect } from 'react'
-import axios from 'axios'
-import { GraduationCap, Mail, Trash2, Search, Eye, Plus, Edit, X } from 'lucide-react'
-import { ToastContainer, toast } from 'react-toastify'
-import 'react-toastify/dist/ReactToastify.css'
+"use client";
 
-const API_USERS = "http://localhost:3001/api/users"
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { formateurService } from '@/service/formateur.service';
+import { toast } from 'react-toastify';
+import { Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
 
-export default function Formateurs() {
-  const [formateurs, setFormateurs] = useState([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [showForm, setShowForm] = useState(false)
-  const [editingFormateur, setEditingFormateur] = useState(null)
-  const [viewFormateur, setViewFormateur] = useState(null)
-  const [deleteFormateur, setDeleteFormateur] = useState(null)
+export default function FormateurCrudPage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [items, setItems] = useState([]);
+  const [query, setQuery] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [editing, setEditing] = useState(null); // { id, ... } | null
+  const [form, setForm] = useState({ nom: '', prenom: '', email: '', mdp: '' });
+  const [viewItem, setViewItem] = useState(null); // détails formateur
+  const [showPwd, setShowPwd] = useState(false);
+  const [newPwd, setNewPwd] = useState('');
+  const [newPwdConfirm, setNewPwdConfirm] = useState('');
+  const [resettingPwd, setResettingPwd] = useState(false);
+  const [deleteItem, setDeleteItem] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
-  const itemsPerPage = 5
-  const [formData, setFormData] = useState({ prenom: '', nom: '', email: '', mdp: '', role: 'formateur' })
+  const Portal = ({ children }) => {
+    if (typeof window === 'undefined') return null;
+    return createPortal(children, document.body);
+  };
 
-  useEffect(() => {
-    fetchFormateurs()
-  }, [])
-
-  const fetchFormateurs = async () => {
+  const load = async () => {
+    setLoading(true);
+    setError('');
     try {
-      const res = await axios.get(API_USERS)
-      const onlyFormateurs = res.data.filter(u => u.role === 'formateur')
-      setFormateurs(onlyFormateurs)
-    } catch (err) {
-      toast.error("Erreur lors du chargement des formateurs")
-      console.error(err)
+      const res = await formateurService.getAllFormateurs();
+      const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setItems(list);
+    } catch (e) {
+      setError(e?.response?.data?.message || e?.message || 'Erreur chargement formateurs');
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
-  // Filtrage
-  const filteredFormateurs = formateurs.filter(f =>
-    f.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    f.prenom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    f.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  useEffect(() => { load(); }, []);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredFormateurs.length / itemsPerPage)
-  const paginatedFormateurs = filteredFormateurs.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
+  const filtered = items.filter((it) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const values = [it.nom, it.prenom, it.email, it.nom_user, it.prenom_user, it.email_user]
+      .filter(Boolean)
+      .map(v => String(v).toLowerCase());
+    return values.some(v => v.includes(q));
+  });
+  const total = items.length;
 
-  // Supprimer
-  const handleDelete = async () => {
-    if (!deleteFormateur) return
-    try {
-      await axios.delete(`${API_USERS}/${deleteFormateur.id}`)
-      setFormateurs(prev => prev.filter(f => f.id !== deleteFormateur.id))
-      toast.success("Formateur supprimé avec succès")
-      setDeleteFormateur(null)
-    } catch (err) {
-      toast.error("Erreur lors de la suppression")
-      console.error(err)
-    }
-  }
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ nom: '', prenom: '', email: '', mdp: '' });
+    setIsOpen(true);
+  };
 
-  // Ajouter ou Modifier
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    const payload = {
-      prenom: formData.prenom.trim(),
-      nom: formData.nom.trim(),
-      email: formData.email.trim(),
-      role: "formateur"
-    }
-
-    if (!editingFormateur && formData.mdp.trim() !== "") {
-      payload.mdp = formData.mdp
-    }
-
-    try {
-      if (editingFormateur) {
-        const res = await axios.put(`${API_USERS}/${editingFormateur.id}`, payload)
-        setFormateurs(prev =>
-          prev.map(f => f.id === editingFormateur.id ? res.data : f)
-        )
-        toast.success("Formateur modifié avec succès")
-      } else {
-        const res = await axios.post(API_USERS, payload)
-        setFormateurs(prev => [...prev, res.data])
-        toast.success("Formateur ajouté avec succès")
-      }
-
-      setShowForm(false)
-      setEditingFormateur(null)
-      setFormData({ prenom: '', nom: '', email: '', mdp: '', role: 'formateur' })
-    } catch (err) {
-      toast.error("Erreur lors de l'enregistrement")
-      console.error(err.response?.data || err.message)
-    }
-  }
-
-  // Préparer édition
-  const handleEdit = (formateur) => { 
-    setEditingFormateur(formateur)
-    setFormData({
-      prenom: formateur.prenom || '',
-      nom: formateur.nom || '',
-      email: formateur.email || '',
+  const openEdit = (it) => {
+    setEditing(it);
+    setForm({
+      nom: it.nom || it.nom_user || '',
+      prenom: it.prenom || it.prenom_user || '',
+      email: it.email || it.email_user || '',
       mdp: '',
-      role: 'formateur'
-    })
-    setShowForm(true)
-  }
+    });
+    setViewItem(null);
+    setDeleteItem(null);
+    setIsOpen(true);
+  };
+
+  const closeModal = () => { setIsOpen(false); };
+
+  const save = async (e) => {
+    e.preventDefault();
+    // Validations côté client
+    if (!form.nom?.trim() || !form.prenom?.trim()) {
+      toast.error('Nom et prénom sont requis');
+      return;
+    }
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.email||'').trim());
+    if (!emailOk) {
+      toast.error("L'email n'est pas valide");
+      return;
+    }
+    // Si création (pas édition), mdp requis !
+    if (!editing && (!form.mdp || String(form.mdp).trim().length < 6)) {
+      toast.error('Le mot de passe est requis et doit contenir au moins 6 caractères !');
+      return;
+    }
+    try {
+      if (editing?.id) {
+        const updated = await formateurService.updateFormateur(editing.id, form);
+        setItems((prev) => prev.map((it) => (it.id === editing.id ? { ...it, ...form, ...(updated || {}) } : it)));
+        toast.success('Formateur mis à jour');
+      } else {
+        // Création : mdp toujours envoyé (le champ est toujours affiché et required dans le form)
+        const created = await formateurService.createFormateur(form);
+        setItems((prev) => [{ ...(created || {}), ...form, id: created?.id || created?.data?.id }, ...prev]);
+        toast.success('Formateur créé');
+      }
+      setIsOpen(false);
+    } catch (e2) {
+      const apiMsg = e2?.response?.data?.message || e2?.response?.data?.error || e2?.message;
+      toast.error(apiMsg || (editing?.id ? 'Erreur lors de la mise à jour' : 'Erreur lors de la création'));
+    }
+  };
+
+  const remove = async (id) => {
+    try {
+      setDeletingId(id);
+      await formateurService.deleteFormateur(id);
+      setItems((prev) => prev.filter((it) => it.id !== id));
+      toast.success('Formateur supprimé');
+    } catch (e2) {
+      toast.error(e2?.response?.data?.message || e2?.message || 'Erreur suppression');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <ToastContainer />
-      <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200">
-        
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <GraduationCap className="w-6 h-6 text-blue-500" />
-            Formateurs ({formateurs.length})
-          </h1>
-          <div className="flex items-center gap-2 mt-2 sm:mt-0">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Rechercher..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
+      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-5 border-b bg-gradient-to-r from-emerald-50 to-blue-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Formateurs</h1>
+              <p className="text-sm text-gray-600">Gestion des formateurs (CRUD)</p>
             </div>
-            <button
-              onClick={() => { setShowForm(true); setEditingFormateur(null) }}
-              className="ml-3 flex items-center gap-1 bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600"
-            >
-              <Plus className="w-4 h-4" /> Ajouter
-            </button>
+            <button onClick={openCreate} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Nouveau</button>
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded-lg border bg-white">
+              <div className="text-xs text-gray-500">Total</div>
+              <div className="text-lg font-semibold">{total}</div>
+            </div>
+            <div className="sm:col-span-3 flex items-center gap-3">
+              <input
+                value={query}
+                onChange={(e)=>setQuery(e.target.value)}
+                placeholder="Rechercher (nom, prénom, email)"
+                className="flex-1 border rounded-lg px-3 py-2 bg-white"
+              />
+              <div className="text-sm text-gray-600">{filtered.length} affichés</div>
+            </div>
           </div>
         </div>
 
-        {/* Formulaire */}
-        {showForm && (
-          <div className="p-6 border-b border-gray-200 bg-gray-50">
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Prénom"
-                value={formData.prenom}
-                onChange={(e) => setFormData({ ...formData, prenom: e.target.value })}
-                className="border rounded-lg p-2"
-                required
-              />
-              <input
-                type="text"
-                placeholder="Nom"
-                value={formData.nom}
-                onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
-                className="border rounded-lg p-2"
-                required
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="border rounded-lg p-2 col-span-2"
-                required
-              />
-              {!editingFormateur && (
-                <input
-                  type="password"
-                  placeholder="Mot de passe"
-                  value={formData.mdp}
-                  onChange={(e) => setFormData({ ...formData, mdp: e.target.value })}
-                  className="border rounded-lg p-2 col-span-2"
-                  required
-                />
-              )}
-              <div className="flex gap-2 col-span-2">
-                <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">
-                  {editingFormateur ? "Modifier" : "Ajouter"}
-                </button>
-                <button
+        <div className="p-6">
+          {loading ? (
+            <div className="text-center text-gray-600">Chargement…</div>
+          ) : error ? (
+            <div className="text-center text-red-600">{error}</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center text-gray-600">Aucun formateur.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-700">
+                    <th className="text-left px-4 py-2 font-medium">ID</th>
+                    <th className="text-left px-4 py-2 font-medium">Nom</th>
+                    <th className="text-left px-4 py-2 font-medium">Prénom</th>
+                    <th className="text-left px-4 py-2 font-medium">Email</th>
+                    <th className="text-right px-4 py-2 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((it) => (
+                    <tr key={it.id} className="border-t">
+                      <td className="px-4 py-2">{it.id}</td>
+                      <td className="px-4 py-2">{it.nom || it.nom_user}</td>
+                      <td className="px-4 py-2">{it.prenom || it.prenom_user}</td>
+                      <td className="px-4 py-2">{it.email || it.email_user}</td>
+                      <td className="px-4 py-2 text-right space-x-2">
+                        <button
                   type="button"
-                  onClick={() => { setShowForm(false); setEditingFormateur(null) }}
-                  className="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500 flex items-center gap-1"
-                >
-                  <X className="w-4 h-4" /> Annuler
+                          onClick={() => { setIsOpen(false); setViewItem({ ...it }); setNewPwd(''); setShowPwd(false); }}
+                          className="inline-flex items-center justify-center w-9 h-9 rounded-md border hover:bg-gray-50"
+                          title="Détails"
+                          aria-label="Détails"
+                        >
+                          <Eye className="w-4 h-4 text-gray-700" />
                 </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Table */}
-        <div className="overflow-x-auto mt-4">
-          <table className="min-w-full divide-y divide-gray-200 shadow-sm rounded-lg overflow-hidden">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nom & Prénom</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Email</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Rôle</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedFormateurs.map((formateur, idx) => (
-                <tr key={formateur.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50 hover:bg-gray-100"}>
-                  <td className="px-6 py-4 font-medium text-gray-900">{formateur.prenom} {formateur.nom}</td>
-                  <td className="px-6 py-4 text-gray-700 flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-gray-400" /> {formateur.email}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-                      {formateur.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 flex gap-3 justify-center">
-                    <button onClick={() => setViewFormateur(formateur)} className="text-blue-600 hover:text-blue-800 transition-colors">
-                      <Eye className="w-5 h-5" />
+                        <button
+                          onClick={() => openEdit(it)}
+                          className="inline-flex items-center justify-center w-9 h-9 rounded-md border hover:bg-gray-50"
+                          title="Modifier"
+                          aria-label="Modifier"
+                        >
+                          <Pencil className="w-4 h-4 text-gray-700" />
                     </button>
-                    <button onClick={() => handleEdit(formateur)} className="text-green-600 hover:text-green-800 transition-colors">
-                      <Edit className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => setDeleteFormateur(formateur)} className="text-red-600 hover:text-red-800 transition-colors">
-                      <Trash2 className="w-5 h-5" />
+                        <button
+                          onClick={() => { setIsOpen(false); setDeleteItem(it); }}
+                          className="inline-flex items-center justify-center w-9 h-9 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+                          title="Supprimer"
+                          aria-label="Supprimer"
+                          disabled={deletingId === it.id}
+                        >
+                          {deletingId === it.id ? (
+                            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                            </svg>
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
                     </button>
                   </td>
                 </tr>
               ))}
-              {paginatedFormateurs.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="text-center py-10 text-gray-500">Aucun formateur trouvé</td>
-                </tr>
-              )}
             </tbody>
           </table>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex justify-center mt-4 gap-2">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-3 py-1 rounded-lg ${currentPage === page ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-                >
-                  {page}
-                </button>
-              ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal détails */}
-      {viewFormateur && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-96">
-            <h2 className="text-lg font-bold mb-4">Détails du formateur</h2>
-            <p><strong>Prénom:</strong> {viewFormateur.prenom}</p>
-            <p><strong>Nom:</strong> {viewFormateur.nom}</p>
-            <p><strong>Email:</strong> {viewFormateur.email}</p>
-            <button
-              onClick={() => setViewFormateur(null)}
-              className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-            >
-              Fermer
-            </button>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">{editing ? 'Modifier le formateur' : 'Nouveau formateur'}</h3>
+              <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            <form onSubmit={save} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-600">Nom</label>
+                <input value={form.nom} onChange={(e)=>setForm(f=>({...f, nom:e.target.value}))} className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600">Prénom</label>
+                <input value={form.prenom} onChange={(e)=>setForm(f=>({...f, prenom:e.target.value}))} className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600">Email</label>
+                <input type="email" value={form.email} onChange={(e)=>setForm(f=>({...f, email:e.target.value}))} className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required />
+          </div>
+              {!editing && (
+                <div>
+                  <label className="block text-sm text-gray-600">Mot de passe</label>
+                  <input type="password" value={form.mdp} onChange={(e)=>setForm(f=>({...f, mdp:e.target.value}))} className="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent" placeholder="Min. 6 caractères" required />
+        </div>
+      )}
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button type="button" onClick={closeModal} className="px-4 py-2 rounded border hover:bg-gray-50">Annuler</button>
+                <button type="submit" className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">{editing ? 'Enregistrer' : 'Créer'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Modal suppression */}
-      {deleteFormateur && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-96">
-            <h2 className="text-lg font-bold mb-4 text-red-600">Confirmation</h2>
-            <p>Voulez-vous vraiment supprimer <strong>{deleteFormateur.prenom} {deleteFormateur.nom}</strong> ?</p>
-            <div className="flex gap-3 mt-6 justify-end">
-              <button
-                onClick={() => setDeleteFormateur(null)}
-                className="px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                Supprimer
-              </button>
+      {/* Modal détails + réinitialisation mot de passe */}
+      {viewItem && (
+        <Portal>
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md pointer-events-auto">
+              <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Détails du formateur</h3>
+              <button type="button" onClick={() => setViewItem(null)} className="text-gray-500 hover:text-gray-700" aria-label="Fermer">✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <div className="text-sm text-gray-600">Nom</div>
+                <div className="text-base text-gray-900 font-medium">{viewItem.nom || viewItem.nom_user}</div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-600">Prénom</div>
+                <div className="text-base text-gray-900 font-medium">{viewItem.prenom || viewItem.prenom_user}</div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-600">Email</div>
+                <div className="text-base text-gray-900 font-medium">{viewItem.email || viewItem.email_user}</div>
+              </div>
+              <div className="pt-2 space-y-2">
+                <div className="flex items-center justify-end gap-2 mt-2">
+                  <button onClick={() => setViewItem(null)} className="px-4 py-2 rounded border hover:bg-gray-50">Fermer</button>
+                </div>
+              </div>
+            </div>
             </div>
           </div>
-        </div>
+        </Portal>
       )}
+
+      {/* Modal de confirmation de suppression */}
+      {deleteItem && (
+        <Portal>
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md pointer-events-auto">
+              <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-red-600">Confirmer la suppression</h3>
+              <button type="button" onClick={() => setDeleteItem(null)} className="text-gray-500 hover:text-gray-700" aria-label="Fermer">✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-700">
+                Voulez-vous vraiment supprimer
+                {' '}<span className="font-medium">{deleteItem.prenom || deleteItem.prenom_user} {deleteItem.nom || deleteItem.nom_user}</span>
+                {' '}? Cette action est irréversible.
+              </p>
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button type="button" onClick={() => setDeleteItem(null)} className="px-4 py-2 rounded border hover:bg-gray-50">Annuler</button>
+                  <button
+                  type="button"
+                  onClick={async () => { await remove(deleteItem.id); setDeleteItem(null); }}
+                  className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+                  disabled={deletingId === deleteItem.id}
+                  >
+                    {deletingId === deleteItem.id ? 'Suppression…' : 'Supprimer'}
+                  </button>
+                </div>
+            </div>
+          </div>
+          </div>
+        </Portal>
+      )}
+      {/* spécialité supprimée */}
+      <div className="pt-2 hidden"></div>
     </div>
-  )
+  );
 }

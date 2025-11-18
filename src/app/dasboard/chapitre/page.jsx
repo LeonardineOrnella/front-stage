@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Edit, Trash2, Search, X } from 'lucide-react';
 import RequireRole from '@/components/backoOffice/RequireRole'
+import ConfirmModal from '@/components/backoOffice/ConfirmModal'
 
 const API_CHAP = "http://localhost:3001/api/chapitres";
 const API_CAT = "http://localhost:3001/api/categories";
@@ -24,6 +25,7 @@ const Chapitres = () => {
     type: 'Publié',
     id_categ: null,
   });
+  const [confirmState, setConfirmState] = useState({ open:false, title:'', message:'', onConfirm:null });
 
   // Charger catégories + chapitres
   useEffect(() => {
@@ -101,11 +103,17 @@ const Chapitres = () => {
   };
 
   // Suppression
-  const handleDelete = async (id) => {
-    if (window.confirm("Supprimer ce chapitre ?")) {
-      await axios.delete(`${API_CHAP}/${id}`);
-      setChapitres(prev => prev.filter(c => c.id_chap !== id));
-    }
+  const handleDelete = (id) => {
+    setConfirmState({
+      open: true,
+      title: 'Supprimer le chapitre',
+      message: 'Supprimer ce chapitre ? Cette action est irréversible.',
+      onConfirm: async () => {
+        await axios.delete(`${API_CHAP}/${id}`);
+        setChapitres(prev => prev.filter(c => c.id_chap !== id));
+        setConfirmState((s)=>({ ...s, open:false }));
+      }
+    });
   };
 
   return (
@@ -292,6 +300,13 @@ const Chapitres = () => {
             </div>
           </div>
         )}
+        <ConfirmModal
+          open={confirmState.open}
+          title={confirmState.title}
+          message={confirmState.message}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState((s)=>({ ...s, open:false }))}
+        />
       </div>
     </div>
     </RequireRole>

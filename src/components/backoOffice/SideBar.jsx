@@ -1,293 +1,203 @@
 "use client"
+
+import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { useUser } from "@/components/backoOffice/student/UserContext"
-import { 
-  LayoutDashboard, 
-  GraduationCap, 
-  Users, 
-  Layers, 
-  BookOpen, 
-  User, 
-  LogOut,
-  ChevronRight,
+import {
+  LayoutDashboard,
+  GraduationCap,
+  BookOpen,
   Settings,
   Bell,
-  FileText,
+  Shield,
   BarChart3,
   CreditCard,
-  Shield,
-  Wrench
+  ChevronRight,
+  User as UserIcon,
+  RadioTower,
+  ListChecks,
+  Trophy,
+  MessageCircle,
+  Users,
+  Layers
 } from "lucide-react"
 
 export default function SideBar() {
   const pathname = usePathname()
   const router = useRouter()
-  
-  // Note: En production, remplacez par votre méthode de gestion d'état
-  const { user } = useUser()
+  const { user, setUser } = useUser() || {}
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
 
   const handleLogout = () => {
     try {
-      // Clear client storages
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        // Delete token cookie
+      setShowLogoutModal(false)
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token")
+        localStorage.removeItem("user")
         document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=Lax"
       }
-    } catch (e) {
-      // no-op
+      if (typeof setUser === "function") {
+        setUser(null)
+      }
+      router.push("/connexion")
+      router.refresh?.()
+    } catch (error) {
+      // No-op: best-effort logout
     }
-    router.push('/')
   }
 
-  const links = [
-    { href: "/dasboard", label: "Accueil", icon: LayoutDashboard, category: "main" },
-    { href: "/dasboard/formation", label: "Formations", icon: GraduationCap, category: "main" },
+  const mainLinks = [
+    { href: "/dasboard", label: "Accueil", icon: LayoutDashboard },
+    { href: "/dasboard/notifications", label: "Notifications", icon: Bell }
   ]
 
-     // Liens spécifiques aux admins
-   const adminLinks = [
-     { href: "/dasboard/utilisateurs", label: "Utilisateurs", icon: Users, category: "admin" },
-     { href: "/dasboard/formation", label: "Cours", icon: GraduationCap, category: "admin" },
-     { href: "/dasboard/categorie", label: "Catégories", icon: Layers, category: "admin" },
-     { href: "/dasboard/formateur", label: "Formateurs", icon: Users, category: "admin" },
-     { href: "/dasboard/statistiques", label: "Statistiques & Rapports", icon: BarChart3, category: "admin" },
-     { href: "/dasboard/parametres", label: "Paramètres", icon: Settings, category: "admin" },
-     { href: "/dasboard/paiements", label: "Paiements & Abonnements", icon: CreditCard, category: "admin" },
-     { href: "/dasboard/moderation", label: "Modération", icon: Shield, category: "admin" },
-     { href: "/dasboard/maintenance", label: "Maintenance", icon: Wrench, category: "admin" },
-   ]
+  const accountLinks = [
+    { href: "/profil", label: "Mon Profil", icon: UserIcon },
+    { href: "/settings", label: "Paramètres", icon: Settings }
+  ]
 
-  // Liens spécifiques aux formateurs
+  const adminLinks = [
+    { href: "/dasboard/utilisateurs", label: "Utilisateurs", icon: Users },
+    { href: "/dasboard/formation", label: "Formations", icon: GraduationCap },
+    { href: "/dasboard/categorie", label: "Catégories", icon: Layers },
+    { href: "/dasboard/formateur", label: "Formateurs", icon: Users },
+    { href: "/dasboard/statistiques", label: "Statistiques", icon: BarChart3 },
+    { href: "/dasboard/paiements", label: "Paiements", icon: CreditCard },
+  ]
+
   const formateurLinks = [
-    { href: "/dasboard/categorie", label: "Catégories", icon: Layers, category: "formateur" },
-    { href: "/dasboard/quiz", label: "Quiz", icon: Layers, category: "formateur" },
-    { href: "/dasboard/resultats", label: "Resultats", icon: Layers, category: "formateur" },
+    { href: "/dasboard/formation", label: "Formations", icon: GraduationCap },
+    { href: "/dasboard/formateur/lives", label: "Lives", icon: RadioTower },
+    { href: "/dasboard/formateur/quiz", label: "Quiz", icon: ListChecks },
+    { href: "/dasboard/formateur/progression", label: "Progression", icon: BarChart3 },
+    { href: "/dasboard/formateur/resultats", label: "Résultats", icon: Trophy }
   ]
 
-  // Liens spécifiques aux apprenants
   const apprenantLinks = [
-    { href: "/dasboard/apprenant", label: "Tableau de bord", icon: LayoutDashboard, category: "apprenant" },
-    { href: "/dasboard/apprenant/catalogue", label: "Catalogue", icon: GraduationCap, category: "apprenant" },
-    { href: "/dasboard/apprenant/mesCours", label: "Mes Cours", icon: BookOpen, category: "apprenant" },
-    { href: "/dasboard/apprenant/quiz", label: "Quiz", icon: Layers, category: "apprenant" },
-    { href: "/dasboard/apprenant/progression", label: "Progression", icon: BarChart3, category: "apprenant" },
-    { href: "/dasboard/apprenant/discussions", label: "Discussions", icon: FileText, category: "apprenant" },
-    { href: "/dasboard/apprenant/notifications", label: "Notifications", icon: Bell, category: "apprenant" },
-    { href: "/dasboard/apprenant/certificats", label: "Certificats", icon: Shield, category: "apprenant" },
+    { href: "/dasboard/apprenant", label: "Tableau de bord", icon: LayoutDashboard },
+    { href: "/dasboard/apprenant/catalogue", label: "Catalogue", icon: GraduationCap },
+    { href: "/dasboard/apprenant/mesCours", label: "Mes Cours", icon: BookOpen },
+    { href: "/dasboard/apprenant/transactions", label: "Transactions", icon: CreditCard },
+    { href: "/dasboard/apprenant/quiz", label: "Quiz", icon: ListChecks },
+    { href: "/dasboard/apprenant/discussions", label: "Discussions", icon: MessageCircle },
+    { href: "/dasboard/apprenant/certificats", label: "Certificats", icon: Shield }
   ]
 
-  const profileLinks = [
-    { href: "/dasboard/profil", label: "Mon Profil", icon: User },
-    { href: "/dasboard/parametres", label: "Paramètres", icon: Settings },
-  ]
+  const renderLink = ({ href, label, icon: Icon }) => {
+    const isActive = pathname === href
+    return (
+      <Link
+        key={href}
+        href={href}
+        className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${
+          isActive
+            ? "bg-white text-emerald-600 font-semibold shadow-lg transform scale-[1.02]"
+            : "text-emerald-100 hover:bg-emerald-700/40 hover:text-white"
+        }`}
+      >
+        <Icon className={`w-5 h-5 transition-transform duration-200 ${isActive ? "scale-110" : "group-hover:scale-105"}`} />
+        <span className="font-medium">{label}</span>
+        {isActive && <ChevronRight className="w-4 h-4 ml-auto opacity-80" />}
+        <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+      </Link>
+    )
+  }
 
   return (
-    <aside className="w-72 bg-emerald-600 text-white flex flex-col shadow-2xl border-r border-emerald-700/30 h-screen">
-      {/* Header avec logo */}
-      <div className="p-6 border-b border-emerald-700/30">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg border border-emerald-400/30">
-            <GraduationCap className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">
-            E-Learn
-          </h1>
-        </div>
-        
-                 {/* User info */}
-         <div className="flex items-center gap-3 p-3 bg-emerald-700/30 rounded-xl backdrop-blur-sm border border-emerald-600/30">
-           <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center">
-             <span className="text-sm font-semibold text-white">
-               {user?.nom?.charAt(0)?.toUpperCase() || user?.prenom?.charAt(0)?.toUpperCase() || 'U'}
-             </span>
-           </div>
-           <div className="flex-1 min-w-0">
-             <p className="text-sm font-medium text-white truncate">
-               {user?.nom && user?.prenom ? `${user.prenom} ${user.nom}` : user?.nom || user?.prenom || 'Utilisateur'}
-             </p>
-             <p className="text-xs text-emerald-200 truncate">
-               {user?.role === 'admin' ? 'Administrateur' : 
-                user?.role === 'formateur' ? 'Formateur' : 
-                user?.role === 'apprenant' ? 'Apprenant' : 'Utilisateur'}
-             </p>
-           </div>
-           <Bell className="w-4 h-4 text-emerald-300" />
-         </div>
+    <aside className="w-full h-screen bg-emerald-500 text-white flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-center p-4 flex-shrink-0">
+        <Image
+          src="/UN-IT_Academy_1000x500.png"
+          alt="UN-IT Academy"
+          width={160}
+          height={50}
+          priority
+          className="h-auto w-auto max-w-[200px]"
+        />
       </div>
 
-      {/* Navigation principale - scrollable si nécessaire */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {/* Section principale */}
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {/* Menu principal */}
         <div className="mb-6">
           <h3 className="text-xs font-semibold text-emerald-200 uppercase tracking-wider mb-3 px-2">
-            Navigation
+            Menu principal
           </h3>
-          {links.filter(link => link.category === "main").map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${
-                pathname === href
-                  ? "bg-white text-emerald-600 font-semibold shadow-lg transform scale-[1.02]"
-                  : "text-emerald-100 hover:bg-emerald-700/40 hover:text-white"
-              }`}
-            >
-              <Icon className={`w-5 h-5 transition-transform duration-200 ${
-                pathname === href ? "scale-110" : "group-hover:scale-105"
-              }`} />
-              <span className="font-medium">{label}</span>
-              {pathname === href && (
-                <ChevronRight className="w-4 h-4 ml-auto opacity-80" />
-              )}
-              
-              {/* Effet de survol */}
-              <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-            </Link>
-          ))}
+          {mainLinks.map(renderLink)}
         </div>
 
-        {/* Section admin (visible uniquement pour admin) */}
-        {user?.role === 'admin' && (
+        {/* Administration / Formateur / Apprenant */}
+        {user?.role === "admin" && (
           <div className="mb-6">
             <h3 className="text-xs font-semibold text-emerald-200 uppercase tracking-wider mb-3 px-2">
               Administration
             </h3>
-            {adminLinks.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${
-                  pathname === href
-                    ? "bg-white text-emerald-600 font-semibold shadow-lg transform scale-[1.02]"
-                    : "text-emerald-100 hover:bg-emerald-700/40 hover:text-white"
-                }`}
-              >
-                <Icon className={`w-5 h-5 transition-transform duration-200 ${
-                  pathname === href ? "scale-110" : "group-hover:scale-105"
-                }`} />
-                <span className="font-medium">{label}</span>
-                {pathname === href && (
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-80" />
-                )}
-                
-                <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-              </Link>
-            ))}
+            {adminLinks.map(renderLink)}
           </div>
         )}
-
-        {/* Section formateur (visible uniquement pour formateur) */}
-        {user?.role === 'formateur' && (
+        {user?.role === "formateur" && (
           <div className="mb-6">
             <h3 className="text-xs font-semibold text-emerald-200 uppercase tracking-wider mb-3 px-2">
               Gestion Formateur
             </h3>
-            {formateurLinks.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${
-                  pathname === href
-                    ? "bg-white text-emerald-600 font-semibold shadow-lg transform scale-[1.02]"
-                    : "text-emerald-100 hover:bg-emerald-700/40 hover:text-white"
-                }`}
-              >
-                <Icon className={`w-5 h-5 transition-transform duration-200 ${
-                  pathname === href ? "scale-110" : "group-hover:scale-105"
-                }`} />
-                <span className="font-medium">{label}</span>
-                {pathname === href && (
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-80" />
-                )}
-                
-                <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-              </Link>
-            ))}
+            {formateurLinks.map(renderLink)}
           </div>
         )}
-
-        {/* Section apprenant (visible uniquement pour apprenant) */}
-        {user?.role === 'apprenant' && (
+        {user?.role === "apprenant" && (
           <div className="mb-6">
             <h3 className="text-xs font-semibold text-emerald-200 uppercase tracking-wider mb-3 px-2">
               Apprentissage
             </h3>
-            {apprenantLinks.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${
-                  pathname === href
-                    ? "bg-white text-emerald-600 font-semibold shadow-lg transform scale-[1.02]"
-                    : "text-emerald-100 hover:bg-emerald-700/40 hover:text-white"
-                }`}
-              >
-                <Icon className={`w-5 h-5 transition-transform duration-200 ${
-                  pathname === href ? "scale-110" : "group-hover:scale-105"
-                }`} />
-                <span className="font-medium">{label}</span>
-                {pathname === href && (
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-80" />
-                )}
-                
-                <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-              </Link>
-            ))}
+            {apprenantLinks.map(renderLink)}
           </div>
         )}
-
-        {/* Section profil */}
-        <div>
-          <h3 className="text-xs font-semibold text-emerald-200 uppercase tracking-wider mb-3 px-2">
-            Compte
-          </h3>
-          {profileLinks.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${
-                pathname === href
-                  ? "bg-white text-emerald-600 font-semibold shadow-lg transform scale-[1.02]"
-                  : "text-emerald-100 hover:bg-emerald-700/40 hover:text-white"
-              }`}
-            >
-              <Icon className={`w-5 h-5 transition-transform duration-200 ${
-                pathname === href ? "scale-110" : "group-hover:scale-105"
-              }`} />
-              <span className="font-medium">{label}</span>
-              {pathname === href && (
-                <ChevronRight className="w-4 h-4 ml-auto opacity-80" />
-              )}
-              
-              <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-            </Link>
-          ))}
-        </div>
-      </nav>
-
-      {/* Footer avec déconnexion */}
-      <div className="p-4 border-t border-emerald-700/30 flex-shrink-0">
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="group w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-emerald-100 hover:bg-red-500/20 hover:text-red-300 border border-transparent hover:border-red-500/30"
-        >
-          <LogOut className="w-5 h-5 group-hover:scale-105 transition-transform duration-200" />
-          <span className="font-medium">Déconnexion</span>
-          <ChevronRight className="w-4 h-4 ml-auto opacity-0 group-hover:opacity-100 transition-all duration-200 transform translate-x-1 group-hover:translate-x-0" />
-        </button>
-        
-        {/* Version info */}
-        <div className="mt-4 text-center">
-          <p className="text-xs text-emerald-300">Version 2.1.0</p>
-        </div>
       </div>
 
-      {/* Décoration gradient */}
-      <div className="absolute top-0 left-0 w-full h-1 bg-emerald-400"></div>
+      {/* Footer */}
+      <div className="border-t border-emerald-700 p-4 flex-shrink-0">
+        <h3 className="text-xs font-semibold text-emerald-200 uppercase tracking-wider mb-3 px-2">
+          Compte
+        </h3>
+        {accountLinks.map(renderLink)}
+        <button
+          onClick={() => setShowLogoutModal(true)}
+          className="mt-4 w-full text-left group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-emerald-100 hover:bg-emerald-700/40 hover:text-white"
+        >
+          <Shield className="w-5 h-5" />
+          <span className="font-medium">Se déconnecter</span>
+        </button>
+      </div>
+
+      {/* Logout Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-6">
+            <h4 className="text-lg font-semibold text-emerald-800 mb-2">
+              Se déconnecter ?
+            </h4>
+            <p className="text-sm text-gray-600 mb-6">
+              Êtes-vous sûr de vouloir vous déconnecter ? Vous devrez vous reconnecter pour accéder à votre espace.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="px-4 py-2 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+              >
+                Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

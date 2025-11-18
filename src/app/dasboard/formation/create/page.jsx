@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { formationService } from '../../../../service/formation.service';
 import { ArrowLeft, Plus, X, Upload, FileText, Video, File, Image, Trash2 } from 'lucide-react';
+import ConfirmModal from '../../../../components/backoOffice/ConfirmModal';
 
 export default function CreateFormationPage() {
   const router = useRouter();
@@ -11,6 +12,7 @@ export default function CreateFormationPage() {
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState([]);
   const [imageCouverture, setImageCouverture] = useState(null);
+  const [confirmState, setConfirmState] = useState({ open: false, title: '', message: '', onConfirm: null });
   const [formData, setFormData] = useState({
     titre_form: '',
     description: '',
@@ -55,12 +57,12 @@ export default function CreateFormationPage() {
     if (file) {
       // Vérifier le type de fichier
       if (!file.type.startsWith('image/')) {
-        alert('Veuillez sélectionner une image valide (JPEG, PNG, GIF, WebP)');
+        alert('Image de couverture invalide');
         return;
       }
       // Vérifier la taille (5MB max)
       if (file.size > 5 * 1024 * 1024) {
-        alert('L\'image de couverture ne doit pas dépasser 5MB');
+        alert('Image trop volumineuse (max 5 Mo)');
         return;
       }
       setImageCouverture(file);
@@ -112,7 +114,7 @@ export default function CreateFormationPage() {
                 ...chap.ressources,
                 { 
                   type: 'pdf', // Type par défaut
-                  fileIndex: files.length // Index du prochain fichier
+                  fileIndex: '' // Sera sélectionné par l'utilisateur
                 }
               ]
             }
@@ -140,10 +142,19 @@ export default function CreateFormationPage() {
   };
 
   const removeChapitre = (index) => {
+    const chapitre = formData.chapitres[index];
+    setConfirmState({
+      open: true,
+      title: 'Supprimer le chapitre',
+      message: `Voulez-vous supprimer le chapitre « ${chapitre.titre_chap || `Chapitre ${chapitre.ordre}`} » ?`,
+      onConfirm: () => {
     setFormData(prev => ({
       ...prev,
       chapitres: prev.chapitres.filter((_, i) => i !== index)
     }));
+        setConfirmState((s)=>({ ...s, open:false }));
+      }
+    });
   };
 
   const removeRessource = (chapitreIndex, ressourceIndex) => {
@@ -165,15 +176,15 @@ export default function CreateFormationPage() {
     
     // Validation
     if (!formData.titre_form.trim()) {
-      alert('Le titre de la formation est obligatoire');
+      alert('Le titre de la formation est requis');
       return;
     }
     if (!formData.id_categ) {
-      alert('Veuillez sélectionner une catégorie');
+      alert('La catégorie est requise');
       return;
     }
     if (formData.chapitres.length === 0) {
-      alert('Veuillez ajouter au moins un chapitre');
+      alert('Ajoutez au moins un chapitre');
       return;
     }
 
@@ -212,11 +223,11 @@ export default function CreateFormationPage() {
       formDataToSend.append('formation', JSON.stringify(formationData));
 
       await formationService.createFormation(formDataToSend);
-      alert('Formation créée avec succès !');
+      alert('Formation créée avec succès');
       router.push('/dasboard/formation');
     } catch (error) {
       console.error('Erreur lors de la création:', error);
-      alert('Erreur lors de la création de la formation');
+      alert('Erreur lors de la création');
     } finally {
       setLoading(false);
     }
@@ -262,8 +273,8 @@ export default function CreateFormationPage() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Créer une Formation</h1>
-            <p className="text-gray-600">Ajoutez une nouvelle formation avec ses chapitres et ressources</p>
+            <h1 className="text-3xl font-bold text-gray-900">Créer une formation</h1>
+            <p className="text-gray-600">Renseignez les informations de base et les chapitres</p>
           </div>
         </div>
       </div>
@@ -271,13 +282,11 @@ export default function CreateFormationPage() {
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Informations de base */}
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900">Informations de Base</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-900">Informations de base</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Titre de la formation *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Intitulé de la formation *</label>
               <input
                 type="text"
                 name="titre_form"
@@ -285,14 +294,12 @@ export default function CreateFormationPage() {
                 onChange={handleInputChange}
                 required
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Ex: Formation React Avancé"
+                placeholder={'Ex. Initiation à JavaScript'}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Catégorie *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Catégorie *</label>
               <select
                 name="id_categ"
                 value={formData.id_categ}
@@ -308,9 +315,7 @@ export default function CreateFormationPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Statut
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Statut</label>
               <select
                 name="statut_form"
                 value={formData.statut_form}
@@ -324,23 +329,19 @@ export default function CreateFormationPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Durée (heures)
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Durée (heures)</label>
               <input
                 type="number"
                 name="duree_form"
                 value={formData.duree_form}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Ex: 40"
+                placeholder={'ex. 12'}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Frais (€)
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Frais (€)</label>
               <input
                 type="number"
                 step="0.01"
@@ -348,42 +349,39 @@ export default function CreateFormationPage() {
                 value={formData.frais_form}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Ex: 299.99"
+                placeholder={'ex. 99.00'}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date de formation
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
               <input
                 type="date"
                 name="date_form"
                 value={formData.date_form}
                 onChange={handleInputChange}
+                min={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
 
           <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
             <textarea
               name="description"
               value={formData.description}
               onChange={handleInputChange}
               rows="4"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Décrivez le contenu et les objectifs de cette formation..."
+              placeholder={'Décrivez brièvement votre formation'}
             />
           </div>
         </div>
 
         {/* Image de couverture */}
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900">Image de Couverture</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-900">Image de couverture</h2>
           
           <div className="space-y-4">
             {!imageCouverture ? (
@@ -397,12 +395,8 @@ export default function CreateFormationPage() {
                 />
                 <label htmlFor="image-couverture-upload" className="cursor-pointer">
                   <Image className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 mb-2">
-                    <span className="font-medium text-blue-600">Cliquez pour sélectionner</span> une image de couverture
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    JPEG, PNG, GIF, WebP (max 5MB)
-                  </p>
+                  <p className="text-gray-600 mb-2"><span className="font-medium text-blue-600">Cliquez pour choisir</span> une image</p>
+                  <p className="text-sm text-gray-500">PNG/JPG, 5 Mo max</p>
                 </label>
               </div>
             ) : (
@@ -428,71 +422,12 @@ export default function CreateFormationPage() {
           </div>
         </div>
 
-        {/* Gestion des fichiers de ressources */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900">Fichiers de Ressources</h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ajouter des fichiers (PDF, Vidéos)
-              </label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.mp4,.avi,.mov,.mkv,.mpeg,.ogg"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 mb-2">
-                    <span className="font-medium text-blue-600">Cliquez pour sélectionner</span> ou glissez-déposez
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    PDF, MP4, AVI, MOV, MKV, MPEG, OGG (max 100MB par fichier)
-                  </p>
-                </label>
-              </div>
-            </div>
-
-            {/* Liste des fichiers sélectionnés */}
-            {files.length > 0 && (
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3">Fichiers sélectionnés</h3>
-                <div className="space-y-2">
-                  {files.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        {getFileIcon(file)}
-                        <div>
-                          <p className="font-medium text-gray-900">{file.name}</p>
-                          <p className="text-sm text-gray-500">
-                            {getFileTypeLabel(file)} • {(file.size / 1024 / 1024).toFixed(2)} MB • Index: {index}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(index)}
-                        className="p-1 hover:bg-red-100 rounded text-red-600 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        
 
         {/* Gestion des chapitres */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Chapitres de la Formation</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Chapitres</h2>
             <button
               type="button"
               onClick={addChapitre}
@@ -505,43 +440,38 @@ export default function CreateFormationPage() {
 
           {formData.chapitres.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              <p>Aucun chapitre ajouté. Commencez par ajouter votre premier chapitre.</p>
+              <p>Aucun chapitre pour le moment.</p>
             </div>
           ) : (
             <div className="space-y-6">
               {formData.chapitres.map((chapitre, chapitreIndex) => (
                 <div key={chapitreIndex} className="border border-gray-200 rounded-lg p-6">
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">
-                      Chapitre {chapitre.ordre}
-                    </h3>
+                    <h3 className="text-lg font-medium text-gray-900">Chapitre {chapitre.ordre}</h3>
                     <button
                       type="button"
                       onClick={() => removeChapitre(chapitreIndex)}
-                      className="text-red-600 hover:text-red-800 text-sm font-medium"
+                      className="text-red-600 hover:text-red-800 text-sm font-medium flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-50 transition-colors"
                     >
-                      Supprimer le chapitre
+                      <Trash2 className="w-4 h-4" />
+                      Supprimer
                     </button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Titre du chapitre
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Titre</label>
                       <input
                         type="text"
                         value={chapitre.titre_chap}
                         onChange={(e) => updateChapitre(chapitreIndex, 'titre_chap', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Ex: Introduction à React"
+                        placeholder={'Ex. Introduction'}
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Ordre
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Ordre</label>
                       <input
                         type="number"
                         value={chapitre.ordre}
@@ -552,15 +482,13 @@ export default function CreateFormationPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Durée
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Durée</label>
                       <input
                         type="text"
                         value={chapitre.duree}
                         onChange={(e) => updateChapitre(chapitreIndex, 'duree', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Ex: 2h30"
+                        placeholder={'ex. 2h30'}
                       />
                     </div>
                   </div>
@@ -568,15 +496,66 @@ export default function CreateFormationPage() {
                   {/* Ressources du chapitre */}
                   <div className="border-t pt-4">
                     <div className="flex justify-between items-center mb-4">
-                      <h4 className="font-medium text-gray-900">Ressources du chapitre</h4>
-                      <button
-                        type="button"
-                        onClick={() => addRessource(chapitreIndex)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm flex items-center space-x-2 transition-colors"
-                      >
-                        <File className="w-4 h-4" />
-                        <span>Ajouter une ressource</span>
-                      </button>
+                      <h4 className="font-medium text-gray-900">Ressources</h4>
+                      <div className="flex items-center gap-2">
+                        <label className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm flex items-center space-x-2 transition-colors cursor-pointer">
+                          <Upload className="w-4 h-4" />
+                          <span>Importer un fichier</span>
+                          <input
+                            type="file"
+                            accept=".pdf,.mp4,.avi,.mov,.mkv"
+                            onChange={handleFileChange}
+                            className="hidden"
+                            multiple
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => addRessource(chapitreIndex)}
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm flex items-center space-x-2 transition-colors"
+                        >
+                          <File className="w-4 h-4" />
+                          <span>Ajouter une ressource</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Liste des fichiers importés */}
+                    {files.length > 0 && (
+                      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Fichiers importés ({files.length})</p>
+                        <div className="space-y-1">
+                          {files.map((file, fileIndex) => (
+                            <div key={fileIndex} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center space-x-2">
+                                {getFileIcon(file)}
+                                <span className="text-gray-700">{file.name}</span>
+                                <span className="text-gray-500">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeFile(fileIndex)}
+                                className="text-red-600 hover:text-red-800"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Lien Drive/URL (optionnel) au niveau du chapitre - affiché une seule fois */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Lien Drive/URL (optionnel)</label>
+                      <input
+                        type="url"
+                        value={chapitre.lien || ''}
+                        onChange={(e) => updateChapitre(chapitreIndex, 'lien', e.target.value)}
+                        placeholder="https://drive.google.com/..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Lien vers des ressources externes</p>
                     </div>
 
                     {chapitre.ressources.length === 0 ? (
@@ -603,9 +582,7 @@ export default function CreateFormationPage() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Type de ressource *
-                                </label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Type *</label>
                                 <select
                                   value={ressource.type}
                                   onChange={(e) => updateRessource(chapitreIndex, ressourceIndex, 'type', e.target.value)}
@@ -618,34 +595,40 @@ export default function CreateFormationPage() {
                               </div>
 
                               <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Fichier associé *
-                                </label>
-                                <select
-                                  value={ressource.fileIndex}
-                                  onChange={(e) => updateRessource(chapitreIndex, ressourceIndex, 'fileIndex', parseInt(e.target.value))}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  required
-                                >
-                                  <option value="">Sélectionner un fichier</option>
-                                  {files.map((file, fileIndex) => (
-                                    <option key={fileIndex} value={fileIndex}>
-                                      {file.name} ({getFileTypeLabel(file)})
-                                    </option>
-                                  ))}
-                                </select>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Fichier *</label>
+                                {files.length === 0 ? (
+                                  <div className="w-full px-3 py-2 border border-yellow-300 rounded-md bg-yellow-50 text-yellow-800 text-sm">
+                                    Aucun fichier importé. Cliquez sur "Importer un fichier" ci-dessus.
+                                  </div>
+                                ) : (
+                                  <select
+                                    value={ressource.fileIndex !== undefined && ressource.fileIndex !== null && ressource.fileIndex !== '' ? ressource.fileIndex : ''}
+                                    onChange={(e) => updateRessource(chapitreIndex, ressourceIndex, 'fileIndex', e.target.value === '' ? undefined : parseInt(e.target.value))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    required
+                                  >
+                                    <option value="">Sélectionner un fichier importé</option>
+                                    {files.map((file, fileIndex) => (
+                                      <option key={fileIndex} value={fileIndex}>
+                                        {file.name} ({getFileTypeLabel(file)})
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
                               </div>
-                            </div>
 
-                            {ressource.fileIndex !== '' && files[ressource.fileIndex] && (
+                            </div>
+                            
+
+                            {ressource.fileIndex !== undefined && ressource.fileIndex !== null && ressource.fileIndex !== '' && typeof ressource.fileIndex === 'number' && files[ressource.fileIndex] ? (
                               <div className="mt-3 p-3 bg-blue-50 rounded-lg">
                                 <p className="text-sm text-blue-800">
-                                  <strong>Fichier sélectionné :</strong> {files[ressource.fileIndex].name} 
+                                  <strong>Fichier sélectionné : </strong>{files[ressource.fileIndex].name} 
                                   ({getFileTypeLabel(files[ressource.fileIndex])}) - 
                                   {(files[ressource.fileIndex].size / 1024 / 1024).toFixed(2)} MB
                                 </p>
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -671,10 +654,17 @@ export default function CreateFormationPage() {
             disabled={loading}
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 transition-colors"
           >
-            {loading ? 'Création en cours...' : 'Créer la Formation'}
+            {loading ? 'Création…' : 'Créer'}
           </button>
         </div>
       </form>
+      <ConfirmModal
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s)=>({ ...s, open:false }))}
+      />
     </div>
   );
 }

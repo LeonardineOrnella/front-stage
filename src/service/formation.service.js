@@ -39,14 +39,10 @@ export const formationService = {
     }
   },
 
-  // Mettre à jour une formation
-  updateFormation: async (id, formData) => {
+  // Mettre à jour une formation (JSON, pas d'upload requis)
+  updateFormation: async (id, payload) => {
     try {
-      const response = await axios.put(`/formations/${id}`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await axios.put(`/formations/${id}`, payload);
       return response.data;
     } catch (error) {
       console.error('Erreur lors de la mise à jour de la formation:', error);
